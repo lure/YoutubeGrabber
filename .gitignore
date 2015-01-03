@@ -1,0 +1,9 @@
+target
+.idea
+*.iml
+Test.scala
+cache
+logs
+ImageLoader.scala
+Authorizer.scala
+settings.cfg
