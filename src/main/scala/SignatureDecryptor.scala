@@ -1,17 +1,28 @@
 import java.util.logging.{Logger, Level}
 
 
+sealed class CryptType
+
+case object CryptHTML5 extends CryptType
+
+case object CryptSWF extends CryptType
+
 /**
  * Decrypts signature.
+ * Both algorithms seems to be identical.
  *
- * NOTE: algorithms changes pretty frequently, hence the save way is to have player downloaded from time to time and decompiled.
- * JS have to be analyzed by hands or by custom grammar (for it's obfuscated).
+ *
+ * NOTE: algorithms changes pretty frequently, hence щту ырщгдв have player downloaded from time to time and decompiled.
+ * JS have to be analyzed by hands or with custom grammar (for it's obfuscated).
  */
 object SignatureDecryptor {
   val logger = Logger.getLogger(getClass.toString)
+  val UncryptedType1 = "(&signature=[^&,]*)".r.unanchored
+  val CriptedType1 = "sig=([^&,]*)".r.unanchored
+  val CriptedType2 = "[&,]s=([^&,]*)".r.unanchored
 
   /**
-   * read http://s.ytimg.com/yts/jsbin/html5player-ru_RU-vfl91Z42B/html5player.js
+   * s.ytimg.com/yts/jsbin/html5player-ru_RU-vfl91Z42B/html5player.js
    */
   def decryptHTML5(sig: String): String = {
     def reorder(str: Array[Char], b: Int) = {
@@ -20,22 +31,22 @@ object SignatureDecryptor {
       str(b) = c
       str
     }
-    val str = sig.toCharArray
-    reorder(str, 8).reverse.drop(1).mkString
+    reorder(sig.toCharArray, 8).reverse.drop(1).mkString
   }
 
   /**
    * decompile https://s.ytimg.com/yts/swfbin/player-vfly1u_c5/watch_as3.swf
    *
-   * Look into YouTube.util.SignatureDecipher.
+   * Look into com.google.YouTube.util.SignatureDecipher.
    * @param sig to be converted into direct form.
    * @return decrypted signature
    */
   def decryptSWF(sig: String): String = {
-    sig.substring(9, 81).reverse +
+    val result = sig.substring(9, 81).reverse +
       sig.charAt(0) +
       sig.substring(1, 8).reverse +
       sig.charAt(8)
+    result
   }
 
   /**
@@ -44,18 +55,12 @@ object SignatureDecryptor {
    * @return formed signature part.
    */
   def apply(urlString: String) = {
-    //http://www.jwz.org/hacks/youtubedown
-    val UncryptedSig1 = "(&signature=[^&,]*)".r.unanchored
-    val UncryptedSig2 = "sig=([^&,]*)".r.unanchored
-    val CriptedSig3 = "[&,]s=([^&,]*)".r.unanchored
-
     urlString match {
-      case UncryptedSig1(signature) => signature
-      case UncryptedSig2(signature) => "&signature=" + signature
-      case CriptedSig3(signature) => "&signature=" + SignatureDecryptor.decryptSWF(signature)
+      case UncryptedType1(signature) => signature
+      case CriptedType1(signature) => "&signature=" + SignatureDecryptor.decryptHTML5(signature)
+      case CriptedType2(signature) => "&signature=" + SignatureDecryptor.decryptHTML5(signature)
       case _ => logger.log(Level.SEVERE, s"Can't find signature. Video is unavailable $urlString")
         ""
     }
   }
 }
-

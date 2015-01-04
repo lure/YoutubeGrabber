@@ -38,7 +38,7 @@ object YouTubeGrabber extends App {
   val VideoPttr = """\"url_encoded_fmt_stream_map\":\s*\"([^\"]*)\"""".r
   val SeparatePttr = """\"adaptive_fmts\":\s*\"([^\"]*)\"""".r
   val TitlePttr = """.*\"title\":\s*\"([^\"]*)\".*""".r
-  val FallbackToRemovePttr = """([^&,]*)""".r
+  val FallbackToRemovePttr = """([^&,\"]*)""".r
   val VideoTypePttr = """[&\?]itag=(\d+)""".r
   val ScriptSelector: String = "div#player-mole-container script ~ script"
 
@@ -84,7 +84,6 @@ object YouTubeGrabber extends App {
       logger.log(Level.INFO, MSG_NoArgsProvided)
       1
     }
-
 
   def getRemoteHtmlDocument(url: String): Option[Document] = {
     try
