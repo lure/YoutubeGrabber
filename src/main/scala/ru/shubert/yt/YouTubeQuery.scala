@@ -217,7 +217,10 @@ object YouTubeQuery extends Loggable {
 
       var tagOption: Option[String] = None
       var signatureOption: Option[String] = None
-      val pams = new mutable.HashSet[NameValuePair]
+      val pams = new mutable.TreeSet[NameValuePair]()(new Ordering[NameValuePair]{
+        override def compare(x: NameValuePair, y: NameValuePair): Int = x.getName.compare(y.getName)
+      })
+
       params.foreach { p =>
         val name = p.getName
         if (name == "signature") {
@@ -280,5 +283,10 @@ object YouTubeQuery extends Loggable {
   def getJavaStreams(url: String): java.util.Map[Int, String] = {
     import scala.collection.JavaConverters._
     getStreams(url).getOrElse(Map()).asJava
+  }
+}
+object a extends App{
+  YouTubeQuery.getStreams("https://www.youtube.com/watch?v=oOGWHBcsHfk") foreach {
+    _.foreach(println )
   }
 }
