@@ -1,3 +1,4 @@
 # YoutubeGrabber [![Build Status](https://travis-ci.org/lure/YoutubeGrabber.svg?branch=master)](https://travis-ci.org/lure/YoutubeGrabber)
 
-Simple command line utility to download videos from YouTube.
+Module that extracts downloadable video and audio streams from youtube. 
+Tag: Download video from youtube java scala :)
