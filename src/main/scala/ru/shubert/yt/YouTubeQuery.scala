@@ -285,8 +285,3 @@ object YouTubeQuery extends Loggable {
     getStreams(url).getOrElse(Map()).asJava
   }
 }
-object a extends App{
-  YouTubeQuery.getStreams("https://www.youtube.com/watch?v=oOGWHBcsHfk") foreach {
-    _.foreach(println )
-  }
-}
