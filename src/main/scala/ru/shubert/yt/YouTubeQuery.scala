@@ -140,12 +140,15 @@ object YouTubeQuery extends Loggable {
       resp = client.execute(method)
       val status = resp.getStatusLine.getStatusCode
       if (status == 200) {
+        LOG.debug("Successful download for url " + url)
         val stream = new BufferedReader(new InputStreamReader(resp.getEntity.getContent))
         val buffer = new StringBuilder
         Iterator.continually(stream.readLine()).takeWhile(_ != null).foreach(buffer.append)
         buffer.toString()
       } else {
-        throw new IllegalArgumentException(s"Error code $status while accessing $url")
+        val msg = s"Error code $status while accessing $url"
+        LOG.debug(msg)
+        throw new IllegalArgumentException(msg)
       }
     } finally {
       HttpClientUtils.closeQuietly(client)
@@ -165,7 +168,9 @@ object YouTubeQuery extends Loggable {
    */
   private def getPlayerConfig(page: String): Try[JsonNode] = page match {
     case PlayerConfigRegex(streams) => Try(mapper.readTree(streams))
-    case _ => Failure(new IllegalArgumentException("Player script was changed " + page))
+    case _ =>
+      LOG.debug("Unable to extract plaer config from (first 300) " + page.take(300))
+      Failure(new IllegalArgumentException("Player script was changed " + page))
   }
 
   // Extract video+audio streams and converts from escaped to plain
@@ -245,23 +250,26 @@ object YouTubeQuery extends Loggable {
    * @param url video url of form `https://www.youtube.com/watch?v=ecekSCX3B4Q`
    * @return option contains map of type to video url
    */
-  def getStreams(url: String): Option[Map[Int, String]] = download(url) match {
-    case Success(page) => getPlayerConfig(page) match {
-      case Success(cfg) => for {
-        urls <- extractStreamsUrl(cfg)
-        playerUlr <- getPlayerUrl(cfg)
-      } yield {
-          Decipher.registerPlayer(playerUlr, download)
-          splitLinks(urls, playerUlr)
-        }
+  def getStreams(url: String): Option[Map[Int, String]] = {
+    LOG.debug("Trying to find streams for: " + url)
+    download(url) match {
+      case Success(page) => getPlayerConfig(page) match {
+        case Success(cfg) => for {
+          urls <- extractStreamsUrl(cfg)
+          playerUlr <- getPlayerUrl(cfg)
+        } yield {
+            Decipher.registerPlayer(playerUlr, download)
+            splitLinks(urls, playerUlr)
+          }
 
+        case Failure(e) =>
+          LOG.error("Failed to parse player's config " + url, e)
+          None
+      }
       case Failure(e) =>
-        LOG.error("Failed to parse player's config " + url, e)
+        LOG.error("Failed to acquire youtube streams for url " + url, e)
         None
     }
-    case Failure(e) =>
-      LOG.error("Failed to acquire youtube streams for url " + url, e)
-      None
   }
 
   /**
@@ -272,13 +280,5 @@ object YouTubeQuery extends Loggable {
   def getJavaStreams(url: String): java.util.Map[Int, String] = {
     import scala.collection.JavaConverters._
     getStreams(url).getOrElse(Map()).asJava
-  }
-}
-
-object a extends App {
-  YouTubeQuery.getStreams("https://www.youtube.com/watch?v=oOGWHBcsHfk") foreach {
-    _.foreach {
-      case (k, v) => println(k, v)
-    }
   }
 }
