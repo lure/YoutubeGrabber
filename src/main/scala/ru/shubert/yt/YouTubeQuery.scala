@@ -77,7 +77,7 @@ private[yt] object Decipher extends Loggable {
             map.putIfAbsent(playerUrl, engine.asInstanceOf[Invocable])
           }
         case Failure(e) =>
-          LOG.error("Failed to download player by url {}", playerUrl, e)
+          LOG.error("Failed to download player by url " +playerUrl, e)
           Failure(e)
       }
     } else {
