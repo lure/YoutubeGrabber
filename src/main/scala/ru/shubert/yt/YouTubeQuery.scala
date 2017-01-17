@@ -204,7 +204,8 @@ object YouTubeQuery extends Loggable {
   private def splitLinks(urls: String, playerUrl: String): Map[Int, String] = {
     val md5 = MD5(urls)
     val urlMap = Map.newBuilder[Int, String]
-
+    val decipher = Decipher.decipher(playerUrl)
+    
     urls.split(",") foreach { desc =>
       LOG.debug(s"For $md5 parsed url $desc")
       import scala.collection.JavaConverters._
@@ -226,12 +227,15 @@ object YouTubeQuery extends Loggable {
         if (name == "signature") {
           signatureOption = Some(p.getValue)
         } else if (name == "s" || name == "sign") {
-          signatureOption = Decipher.decipher(p.getValue, playerUrl)
+          signatureOption = decipher(p.getValue)
         } else if (name == "itag") {
           pams.add(p)
           tagOption = Some(p.getValue)
         } else {
-          pams.add(p)
+          // since 2016 youtube denies urls with empty params.
+          if (StringUtils.isNotEmpty(p.getValue)) {
+            pams.add(p)
+          }
         }
       }
 
@@ -249,37 +253,45 @@ object YouTubeQuery extends Loggable {
   }
 
   /**
-   * Scala oriented method that returns possible video streams.
-   * @param url video url of form `https://www.youtube.com/watch?v=ecekSCX3B4Q`
-   * @return option contains map of type to video url
-   */
-  def getStreams(url: String): Option[Map[Int, String]] = {
-    LOG.debug("Trying to find streams for: " + url)
-    download(url) match {
-      case Success(page) => getPlayerConfig(page) match {
-        case Success(cfg) => for {
-          urls <- extractStreamsUrl(cfg)
-          playerUlr <- getPlayerUrl(cfg)
-        } yield {
-            Decipher.registerPlayer(playerUlr, download)
-            splitLinks(urls, playerUlr)
-          }
-
-        case Failure(e) =>
-          LOG.error("Failed to parse player's config " + url, e)
-          None
+    * Parse streams from whole page represented by string.
+    *
+    * @param page youtube video html page
+    * @return optional map of streams
+    */
+  def getStreamsFromString(page: String): Option[Map[Int, String]] = {
+    getPlayerConfig(page) match {
+      case Success(cfg) => for {
+        urls <- extractStreamsUrl(cfg)
+        playerUlr <- getPlayerUrl(cfg)
+      } yield {
+        Decipher.registerPlayer(playerUlr, download)
+        splitLinks(urls, playerUlr)
       }
       case Failure(e) =>
-        LOG.error("Failed to acquire youtube streams for url " + url, e)
+        LOG.error("Failed to parse player's config " + url, e)
         None
     }
   }
 
   /**
-   * same as getStreams, but returns empty java map if nothing found
-   * @param url video url from youtube
-   * @return map of type to url
-   */
+    * Scala oriented method that returns possible video streams.
+    *
+    * @param url video url of form `https://www.youtube.com/watch?v=ecekSCX3B4Q`
+    * @return option contains map of type to video url
+    */
+  def getStreams(url: String): Option[Map[Int, String]] = download(url) match {
+    case Success(page) => getStreamsFromString(page)
+    case Failure(e) =>
+      LOG.error("Failed to acquire youtube streams for url " + url, e)
+      None
+  }
+
+  /**
+    * same as getStreams, but returns empty java map if nothing found
+    *
+    * @param url video url from youtube
+    * @return map of type to url
+    */
   def getJavaStreams(url: String): java.util.Map[Int, String] = {
     import scala.collection.JavaConverters._
     getStreams(url).getOrElse(Map()).asJava
