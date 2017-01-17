@@ -90,7 +90,7 @@ private[yt] object Decipher extends Loggable {
     if (null != engine) {
       Try(engine.invokeFunction(ExternalFuncName, signature).toString)
     } else {
-      Failure(new IllegalArgumentException("No js function for url {}", playerUrl))
+      Failure(new IllegalArgumentException("No js function for url "+ playerUrl))
     }
   }
 
