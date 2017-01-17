@@ -223,6 +223,7 @@ object YouTubeQuery extends Loggable {
       })
 
       params.foreach { p =>
+        LOG.debug("new param: ", p)
         val name = p.getName
         if (name == "signature") {
           signatureOption = Some(p.getValue)
@@ -233,7 +234,7 @@ object YouTubeQuery extends Loggable {
           tagOption = Some(p.getValue)
         } else {
           // since 2016 youtube denies urls with empty params.
-          if (StringUtils.isNotEmpty(p.getValue)) {
+          if (p.getValue != null && !p.getValue.trim.isEmpty) {
             pams.add(p)
           }
         }
