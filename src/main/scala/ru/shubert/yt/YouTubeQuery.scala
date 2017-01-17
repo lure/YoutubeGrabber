@@ -101,7 +101,7 @@ private[yt] object Decipher extends Loggable {
    * @param playerUrl player url used as a key. No attemp to register
    * @return
    */
-  def decipher(signature: String, playerUrl: String): Option[String] = {
+  def decipher(playerUrl: String)(signature: String): Option[String] = {
     doDecipher(signature, playerUrl) match {
       case Success(s) => Some(s)
       case Failure(e) => LOG.warn(s"Failed to decode $signature ", e)
@@ -269,7 +269,7 @@ object YouTubeQuery extends Loggable {
         splitLinks(urls, playerUlr)
       }
       case Failure(e) =>
-        LOG.error("Failed to parse player's config " + url, e)
+        LOG.error("Failed to parse player's config", e)
         None
     }
   }
