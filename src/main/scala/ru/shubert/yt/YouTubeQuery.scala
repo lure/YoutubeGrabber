@@ -204,7 +204,7 @@ object YouTubeQuery extends Loggable {
   private def splitLinks(urls: String, playerUrl: String): Map[Int, String] = {
     val md5 = MD5(urls)
     val urlMap = Map.newBuilder[Int, String]
-    val decipher = Decipher.decipher(playerUrl)
+    val decipher = Decipher.decipher(playerUrl) _
     
     urls.split(",") foreach { desc =>
       LOG.debug(s"For $md5 parsed url $desc")
