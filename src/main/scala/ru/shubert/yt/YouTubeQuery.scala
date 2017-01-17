@@ -48,28 +48,28 @@ private[yt] object Decipher extends Loggable {
             val epl = FindProcName.findAllIn(player)
             epl.hasNext
             val procName = epl.group(1)
-            LOG.debug("Found main proc name: " + procName)
+            LOG.debug("Found main proc name: {}", procName)
 
             val ExtractProc = ("""(function\s""" + procName + """[^}]*})""").r.unanchored
             val proc = ExtractProc.findAllIn(player)
             proc.hasNext
             val procBody = proc.group(1)
-            LOG.debug("Found main proc body: " + procBody)
+            LOG.debug("Found main proc body: {}", procBody)
 
             // decoding sub proc
             val sbNameRE = ExtractSubProcName.findAllIn(procBody)
             sbNameRE.hasNext
             val subProcName = sbNameRE.group(1)
-            LOG.debug("Found sub proc name: " + subProcName)
+            LOG.debug("Found sub proc name: {}", subProcName)
 
             val sbBodyRE = ("(?U)(var " + subProcName + """=\{.*?(?=\};))""").r.unanchored
             val sb = sbBodyRE.findAllIn(player)
             sb.hasNext
             val sbBody = sb.group(1)
-            LOG.debug("Found sub proc body: " + sbBody)
+            LOG.debug("Found sub proc body: {}", sbBody)
 
             val result = s"$sbBody}; $procBody; function $ExternalFuncName(signature){ return $procName(signature); }"
-            LOG.debug("Final function: " + result)
+            LOG.debug("Final function: {}", result)
 
             val engine = factory.getEngineByName("JavaScript")
             engine.eval(result)
@@ -77,7 +77,7 @@ private[yt] object Decipher extends Loggable {
             map.putIfAbsent(playerUrl, engine.asInstanceOf[Invocable])
           }
         case Failure(e) =>
-          LOG.error("Failed to download player by url " + playerUrl, e)
+          LOG.error("Failed to download player by url {}", playerUrl, e)
           Failure(e)
       }
     } else {
@@ -90,7 +90,7 @@ private[yt] object Decipher extends Loggable {
     if (null != engine) {
       Try(engine.invokeFunction(ExternalFuncName, signature).toString)
     } else {
-      Failure(new IllegalArgumentException("No js function for url " + playerUrl))
+      Failure(new IllegalArgumentException("No js function for url {}", playerUrl))
     }
   }
 
@@ -140,7 +140,7 @@ object YouTubeQuery extends Loggable {
       resp = client.execute(method)
       val status = resp.getStatusLine.getStatusCode
       if (status == 200) {
-        LOG.debug("Successful download for url " + url)
+        LOG.debug("Successful download for url {}", url)
         val stream = new BufferedReader(new InputStreamReader(resp.getEntity.getContent))
         val buffer = new StringBuilder
         Iterator.continually(stream.readLine()).takeWhile(_ != null).foreach(buffer.append)
