@@ -7,6 +7,8 @@ import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FlatSpecLike, Matchers}
 
+import scala.util.matching.UnanchoredRegex
+
 /**
  *
  * Author: Alexandr Shubert
@@ -16,19 +18,19 @@ import org.scalatest.{FlatSpecLike, Matchers}
 class StreamValidTest extends FlatSpecLike with Matchers {
   // YouTube's TopStories news channel
   val NewsChannel = "https://www.youtube.com/playlist?list=PL3ZQ5CpNulQnKJW0h8LQ3fJzgM34nLCxu"
-  val TopVideoRE = """href="(/watch\?v=[^"]*)""".r.unanchored
+  val TopVideoRE: UnanchoredRegex = """href="(/watch\?v=[^"]*)""".r.unanchored
   val HttpsYouTubeCom = "https://www.youtube.com"
 
 
   "download method" should "return downloaded page" in {
-    val result = YouTubeQuery.download(NewsChannel)
+    val result = YouTubeQuery.readStringFromUrl(NewsChannel)
     result should be a 'success
     result.foreach(_ should startWith regex "\\s*<!DOCTYPE html><html")
   }
 
 
   "All found stream urls" should "be accessible" in {
-    val news = YouTubeQuery.download(NewsChannel)
+    val news = YouTubeQuery.readStringFromUrl(NewsChannel)
     news.foreach { body =>
       TopVideoRE.findFirstMatchIn(body) match {
         case Some(u) =>
@@ -37,7 +39,7 @@ class StreamValidTest extends FlatSpecLike with Matchers {
           YouTubeQuery.getStreams(topVideoUrl) match {
             case Some(streams) =>
               val errors = streams.foldLeft(List.empty[String]) {
-                case (acc, (idx, link)) =>
+                case (acc, (_, link)) =>
                   val headMethod = new HttpHead(link)
                   headMethod.setConfig(YouTubeQuery.ReqConfig)
                   try {
