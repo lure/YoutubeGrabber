@@ -8,11 +8,13 @@ import org.slf4j.{Logger, LoggerFactory}
   * Description
   */
 package object yt {
-  type Tagged[U] = {type Tag = U}
-  type @@[T, U] = T with Tagged[U]
-  
   case class StreamsHolder(video: Option[String], adaptive: Option[String])
-  trait Loggable  {
-    val LOG:Logger = LoggerFactory.getLogger(this.getClass)
+  trait Loggable {
+    val LOG: Logger = LoggerFactory.getLogger(this.getClass)
   }
+
+  abstract class YGException(message: String) extends Exception(message)
+  class YGDecipherException(message: String) extends YGException(message)
+  class YGNetworkException(message: String) extends YGException(message)
+  class YGParseException(message: String) extends YGException(message)
 }
