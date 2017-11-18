@@ -3,8 +3,6 @@ package ru.shubert.yt
 import org.apache.http.client.methods.HttpHead
 import org.apache.http.client.utils.HttpClientUtils
 import org.apache.http.impl.client.HttpClients
-import org.junit.runner.RunWith
-import org.scalatest.junit.JUnitRunner
 import org.scalatest.{FlatSpecLike, Matchers}
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
@@ -15,8 +13,6 @@ import scala.util.matching.UnanchoredRegex
   * failing to do so means something changed and either test either extractor should be updated.
   * Author: Alexandr Shubert
   */
-
-@RunWith(value = classOf[JUnitRunner])
 class StreamValidTest extends FlatSpecLike with Matchers {
   // YouTube's TopStories news channel
   val NewsChannel = "https://www.youtube.com/playlist?list=PL3ZQ5CpNulQnKJW0h8LQ3fJzgM34nLCxu"

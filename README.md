@@ -1,6 +1,14 @@
 # YoutubeGrabber [![Build Status](https://travis-ci.org/lure/YoutubeGrabber.svg?branch=master)](https://travis-ci.org/lure/YoutubeGrabber)
 
 Module that extracts downloadable video and audio streams from youtube. 
+Fast usage: 
+
+```
+  YouTubeQuery.getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U"), Duration.Inf)
+  
+  YouTubeQuery.getJavaStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
+``` 
+
 
 **Long story:**
 Every youtube video page contains a js block which initialise html5 player. Of course, there is aa flash player, too, but JS one is more easily to understand. 
