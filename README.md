@@ -4,9 +4,9 @@ Module that extracts downloadable video and audio streams from youtube.
 Fast usage: 
 
 ```
-  YouTubeQuery.getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U"), Duration.Inf)
+  Scala: YouTubeQuery.getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
   
-  YouTubeQuery.getJavaStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
+  Java: YouTubeQuery.getJavaStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
 ``` 
 
 

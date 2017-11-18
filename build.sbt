@@ -21,9 +21,14 @@ lazy val root = (project in file(".")).
   )
 
 lazy val publishSettings = Seq(
-  homepage := Some(url("https://github.com/lure/YoutubeGrabber/")),
-  licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT")),
-  scmInfo := Some(ScmInfo(url("https://github.com/lure/YoutubeGrabber/"), "scm:git:git@github.com:lure/YoutubeGrabber.git")),
+  publishMavenStyle := true,
+  publishArtifact in Test := false,
+  pomIncludeRepository := { _ => false },
+
+  homepage := Some(url("https://github.com/lure/YoutubeGrabber")),
+  licenses := Seq("Apache 2" -> url("http://www.apache.org/licenses/LICENSE-2.0.txt")),
+  scmInfo := Some(ScmInfo(url("https://github.com/lure/YoutubeGrabber"), "scm:git:git@github.com:lure/YoutubeGrabber.git")),
+  organization := "ru.shubert",
   pomExtra := <developers>
     <developer>
       <id>lure</id>
@@ -39,6 +44,12 @@ lazy val publishSettings = Seq(
   )
 ) ++ credentialSettings
 
-lazy val credentialSettings = Seq(
-  credentials += Credentials(Path.userHome / ".sonatype" / ".credentials")
+lazy val noPublishSettings = Seq(
+  publish := (),
+  publishLocal := (),
+  publishArtifact := false
 )
+
+//lazy val credentialSettings = Seq(
+//  credentials += Credentials(Path.userHome / ".sbt" / "1.0" /"sonatype.sbt")
+//)
