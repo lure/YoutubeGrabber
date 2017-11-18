@@ -4,7 +4,9 @@ import _root_.java.io.{BufferedReader, InputStreamReader}
 import _root_.java.net.URLDecoder
 import _root_.java.nio.charset.StandardCharsets
 import java.security.MessageDigest
-
+import java.util.concurrent.{TimeUnit, Future ⇒ JFuture}
+import java.util.{Map ⇒ JMap}
+import scala.collection.JavaConverters._
 import _root_.org.apache.http.NameValuePair
 import _root_.org.apache.http.message.BasicNameValuePair
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
@@ -13,8 +15,11 @@ import org.apache.http.client.config.RequestConfig
 import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet}
 import org.apache.http.client.utils.{HttpClientUtils, URLEncodedUtils}
 import org.apache.http.impl.client.HttpClients
-
+import ru.shubert.yt.Decipher.DecipherFunction
 import scala.collection.mutable
+import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -29,12 +34,19 @@ import scala.util.{Failure, Success, Try}
 object YouTubeQuery extends Loggable {
   private val mapper = new ObjectMapper()
   private val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.0.0 Safari/537.11 Firefox/34.0"
-
   private val PlayerConfigRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
+
   protected[yt] val ReqConfig: RequestConfig = RequestConfig.custom().setConnectionRequestTimeout(5000).setConnectTimeout(5000)
     .setRedirectsEnabled(true).build()
 
-  protected[yt] def readStringFromUrl(url: String): Try[String] = Try {
+  implicit val ordering: Ordering[NameValuePair] = (x: NameValuePair, y: NameValuePair) => x.getName.compare(y.getName)
+
+  case class SingleStream(urlExploded: Array[String],  params: mutable.Buffer[NameValuePair])
+  case class TagStream(itag: Try[String] = Failure(new YGParseException("itag not found")),
+                       subscription: Try[String] = Failure(new YGParseException("subscription not found")),
+                       params: mutable.TreeSet[NameValuePair] = mutable.TreeSet[NameValuePair]())
+
+  protected[yt] def readStringFromUrl(url: String): Future[String] = Future {
     val method = new HttpGet(url)
     method.addHeader("Accept-Charset", StandardCharsets.UTF_8.name())
     method.addHeader("User-Agent", ModernBrowser)
@@ -54,7 +66,7 @@ object YouTubeQuery extends Loggable {
       } else {
         val msg = s"Error code $status while accessing $url"
         LOG.debug(msg)
-        throw new IllegalArgumentException(msg)
+        throw new YGNetworkException(msg)
       }
     } finally {
       HttpClientUtils.closeQuietly(client)
@@ -74,24 +86,33 @@ object YouTubeQuery extends Loggable {
     * @param page where player should be found
     * @return json nodes wrapped in Success or Failure with exception
     */
-  private def getPlayerConfig(page: String): Try[JsonNode] = page match {
-    case PlayerConfigRegex(streams) => Try(mapper.readTree(streams))
+  private def getPlayerConfig(page: String): Future[JsonNode] = page match {
+    case PlayerConfigRegex(streams) => Future(mapper.readTree(streams))
     case _ =>
-      LOG.debug("Unable to extract plaer config from (first 300) " + page.take(300))
-      Failure(new IllegalArgumentException("Player script was changed " + page))
+      LOG.debug("Unable to extract player config from (first 300) " + page.take(300))
+      Future.failed(new YGParseException("Player script was changed: " + page))
   }
 
   // Extract video+audio streams and converts from escaped to plain
-  private def extractStreamsUrl(cfg: JsonNode): StreamsHolder = {
+  private def extractStreamsUrl(cfg: JsonNode): Future[StreamsHolder] = {
     val root = cfg.path("args")
 
-    def extract(name: String) = Option(root.path(name).asText(null)).map(StringEscapeUtils.unescapeJava)
+    def extract(name: String, doc: JsonNode): Option[String] = Option(doc.path(name).asText(null)).map(StringEscapeUtils.unescapeJava)
 
-    StreamsHolder(extract("url_encoded_fmt_stream_map"), extract("adaptive_fmts"))
+    val vf = Future(extract("url_encoded_fmt_stream_map", root))
+    val af = Future(extract("adaptive_fmts", root))
+
+    for {
+      video ← vf
+      adaptive ← af
+    } yield {
+      LOG.trace("Video streams?: {} \n adaptive? {}", video.isDefined, adaptive.isDefined)
+      StreamsHolder(video, adaptive)
+    }
   }
 
-  private def getPlayerUrl(cfg: JsonNode): Option[String] =
-    Option(cfg.path("assets").path("js").asText(null)) map (URLDecoder.decode(_, StandardCharsets.UTF_8.name()))
+  private def getPlayerUrl(cfg: JsonNode): Future[String] =
+    Future(Option(cfg.path("assets").path("js").asText(null)).map(URLDecoder.decode(_, StandardCharsets.UTF_8.name())).getOrElse(throw new YGParseException("")))
 
   /**
     * Each stream is described by [header][\s][url with some params]
@@ -105,62 +126,55 @@ object YouTubeQuery extends Loggable {
     * Obscuring function is determined by player provided and may change not with time only but even with different videos.
     * I.e. some of videos are bound to special player revision.
     *
-    * @param urls      block of urls
-    * @param playerUrl player url
+    * @param urls     block of urls
+    * @param decipher decipher function
     * @return Map of videoType to url relations
     */
-  private def splitLinks(urls: String, playerUrl: String): Map[Int, String] = {
+  private def buildDownloadLinks(urls: String, decipher: DecipherFunction): Seq[Try[(Int, String)]] = {
     val md5 = MD5(urls)
-    val urlMap = Map.newBuilder[Int, String]
-    val decipher = Decipher.decipher(playerUrl) _
-
-    urls.split(",") foreach { desc =>
+    def getSingleStream(desc: String) = {
+        // Why so complicate? Youtube servers rejects requests with : 1.duplicate tags (!!!), 2.with + replaced with ' ', 3.on some urldecodings.
+        // So here we doing our best not to interfere with params.
+        val params1 = URLEncodedUtils.parse(desc, StandardCharsets.UTF_8).asScala
+        val splitUrl = params1.partition(_.getName == "url")
+        val urlExploded = splitUrl._1.head.getValue.split("\\?")
+        val decodedLine = URLDecoder.decode(urlExploded(1), StandardCharsets.UTF_8.name())
+        val params = splitUrl._2 ++ URLEncodedUtils.parse(decodedLine, StandardCharsets.UTF_8).asScala
+        SingleStream(urlExploded, params)
+    }
+    urls.split(",") map { desc =>
       LOG.debug(s"For $md5 parsed url $desc")
-      import scala.collection.JavaConverters._
-      // Why so complicate? Youtube servers rejects requests with : 1.duplicate tags (!!!), 2.with + replaced with ' ', 3.on some urldecodings.
-      // So here we doing our best not to interfere with params.
-      val params1 = URLEncodedUtils.parse(desc, StandardCharsets.UTF_8).asScala
-      val splitUrl = params1.partition(_.getName == "url")
-      val urlExploded = splitUrl._1.head.getValue.split("\\?")
-      val decodedLine = URLDecoder.decode(urlExploded(1), StandardCharsets.UTF_8.name())
-      val params = splitUrl._2 ++ URLEncodedUtils.parse(decodedLine, StandardCharsets.UTF_8).asScala
-
-      var tagOption: Option[String] = None
-      var signatureOption: Option[String] = None
-      val pams = new mutable.TreeSet[NameValuePair]()(new Ordering[NameValuePair] {
-        override def compare(x: NameValuePair, y: NameValuePair): Int = x.getName.compare(y.getName)
-      })
-
-      params.foreach { p =>
-        LOG.trace(s"[$md5] param: ${p.toString}")
-        val name = p.getName
-        if (name == "signature") {
-          signatureOption = Some(p.getValue)
-        } else if (name == "s" || name == "sign") {
-          signatureOption = decipher(p.getValue)
-        } else if (name == "itag") {
-          pams.add(p)
-          tagOption = Some(p.getValue)
-        } else {
-          // since 2016 youtube denies urls with empty params.
-          if (p.getValue != null && !p.getValue.trim.isEmpty) {
-            pams.add(p)
+      val singleStream: SingleStream = getSingleStream(desc)
+      val urlExploded: Array[String] = singleStream.urlExploded
+      val taggedStream = singleStream.params.foldLeft(TagStream()) { case (acc, pair) ⇒
+          pair.getName match {
+            case "signature" ⇒ acc.copy(subscription = Success(pair.getValue))
+            case "s" | "sign" ⇒ acc.copy(subscription = decipher.flatMap(f ⇒ f(pair.getValue)))
+            case "itag" ⇒ acc.copy(itag = Success(pair.getValue))
+            case _ ⇒ // since 2016 youtube denies urls with empty params.
+              if(pair.getValue != null && !pair.getValue.trim.isEmpty){
+                acc.params.add(pair)
+              }
+              acc
           }
-        }
       }
 
-      LOG.debug(s"For $md5, url $desc params are url $pams")
+      LOG.debug(s"For $md5 params are ${taggedStream.params}")
       for {
-        tag <- tagOption
-        sig <- signatureOption
-      } {
-        pams.add(new BasicNameValuePair("signature", sig))
-        val link = urlExploded(0) + "?" + URLEncodedUtils.format(pams.toList.asJava, StandardCharsets.UTF_8)
-        urlMap += (tag.toInt -> link)
+        tag ← taggedStream.itag
+        sig ← taggedStream.subscription
+      } yield {
+        taggedStream.params.add(new BasicNameValuePair("signature", sig))
+        taggedStream.params.add(new BasicNameValuePair("itag", tag))
+        val link = urlExploded(0) + "?" + URLEncodedUtils.format(taggedStream.params.toList.asJava, StandardCharsets.UTF_8)
+        tag.toInt -> link
       }
     }
-    urlMap.result()
   }
+
+
+
+
 
   /**
     * Parse streams from whole page represented by string.
@@ -168,21 +182,28 @@ object YouTubeQuery extends Loggable {
     * @param page youtube video html page
     * @return optional map of streams
     */
-  def getStreamsFromString(page: String): Option[Map[Int, String]] = {
-    getPlayerConfig(page) match {
-      case Success(cfg) =>
-        val streams = extractStreamsUrl(cfg)
-        LOG.trace(s"Video streams: ${streams.video.isDefined}, adaptive: ${streams.adaptive.isDefined}")
-        for {
-          playerUlr ← getPlayerUrl(cfg)
-          _ ← Decipher.registerPlayer(playerUlr, readStringFromUrl).toOption
-          links ← (streams.adaptive ++ streams.video).reduceLeftOption(_ + "," + _)
-        } yield {
-          splitLinks(links, playerUlr)
-        }
-      case Failure(e) =>
-        LOG.error("Failed to parse player's config", e)
-        None
+  def getStreamsFromString(page: String): Future[Map[Int, String]] = {
+    getPlayerConfig(page).flatMap { cfg ⇒
+      val streamsF = extractStreamsUrl(cfg)
+      val playerUrlF = getPlayerUrl(cfg)
+
+      for {
+        streams ← streamsF
+        playerUlr ← playerUrlF
+        decipher: DecipherFunction = Decipher.registerPlayer(playerUlr, readStringFromUrl)
+
+        videoF = Future(streams.video.map(buildDownloadLinks(_, decipher)))
+        adaptiveF = Future(streams.adaptive.map(buildDownloadLinks(_, decipher)))
+
+        video ← videoF
+        adaptive ← adaptiveF
+      } yield {
+        // Option[Seq[Try[(Int, String)]
+        (video ++ adaptive)
+          .flatten
+          .flatMap(_.toOption)
+          .toMap
+      }
     }
   }
 
@@ -192,12 +213,7 @@ object YouTubeQuery extends Loggable {
     * @param url video url of form `https://www.youtube.com/watch?v=ecekSCX3B4Q`
     * @return option contains map of type to video url
     */
-  def getStreams(url: String): Option[Map[Int, String]] = readStringFromUrl(url) match {
-    case Success(page) => getStreamsFromString(page)
-    case Failure(e) =>
-      LOG.error("Failed to acquire youtube streams for url " + url, e)
-      None
-  }
+  def getStreams(url: String): Future[Map[Int, String]] = readStringFromUrl(url).flatMap(getStreamsFromString)
 
   /**
     * same as getStreams, but returns empty java map if nothing found
@@ -205,8 +221,14 @@ object YouTubeQuery extends Loggable {
     * @param url video url from youtube
     * @return map of type to url
     */
-  def getJavaStreams(url: String): java.util.Map[Int, String] = {
-    import scala.collection.JavaConverters._
-    getStreams(url).getOrElse(Map()).asJava
+  def getJavaStreams(url: String): JFuture[JMap[Int, String]] = {
+    class MyFuture(future: Future[Map[Int, String]]) extends JFuture[JMap[Int, String]] {
+      override def cancel(mayInterruptIfRunning: Boolean): Boolean = throw new NotImplementedError
+      override def isCancelled: Boolean = false
+      override def isDone: Boolean = future.isCompleted
+      override def get(): JMap[Int, String] = Await.result(future, Duration.Inf).asJava
+      override def get(timeout: Long, unit: TimeUnit): JMap[Int, String] = Await.result(future, FiniteDuration(timeout, unit)).asJava
+    }
+    new MyFuture(getStreams(url))
   }
 }
