@@ -31,7 +31,12 @@ lazy val publishSettings = Seq(
       <url>https://github.com/lure/</url>
     </developer>
   </developers>,
-  publishTo := Some("Sonatype Snapshots Nexus" at "https://oss.sonatype.org/content/repositories/snapshots")
+  publishTo := Some(
+    if (isSnapshot.value)
+      Opts.resolver.sonatypeSnapshots
+    else
+      Opts.resolver.sonatypeStaging
+  )
 ) ++ credentialSettings
 
 lazy val credentialSettings = Seq(
