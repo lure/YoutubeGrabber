@@ -41,7 +41,7 @@ object YouTubeQuery extends Loggable {
 
 //  implicit val ordering: Ordering[NameValuePair] = (x: NameValuePair, y: NameValuePair) => x.getName.compare(y.getName)
   implicit val ordering: Ordering[NameValuePair] = new Ordering[NameValuePair] {
-    override def compare(x: NameValuePair, y: NameValuePair) = x.getName.compare(y.getName)
+    override def compare(x: NameValuePair, y: NameValuePair): Int = x.getName.compare(y.getName)
   }
 
   case class SingleStream(urlExploded: Array[String],  params: mutable.Buffer[NameValuePair])
