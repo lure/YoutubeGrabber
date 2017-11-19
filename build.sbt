@@ -1,15 +1,17 @@
 import Dependencies._
 
 
-lazy val root = (project in file(".")).
-  settings(
-    inThisBuild(List(
+lazy val root = (project in file("."))
+  .settings(
+    List(
+      name := "youtubegrabber",
       organization := "ru.shubert",
       description := "Youtube video grabber",
       scalaVersion := "2.12.3",
-      version := "1.3"
-    )),
-    name := "youtube-grabber",
+      crossScalaVersions := Seq("2.10.6", "2.11.8", "2.12.3"), //"2.13.0-M2" fails, see https://github.com/sbt/sbt/issues/3427
+      version := "1.4",
+      isSnapshot := false
+    ),
     libraryDependencies ++= Seq(
       apacheCommons,
       apacheHttp,
@@ -19,6 +21,7 @@ lazy val root = (project in file(".")).
       scalatest % Test
     )
   )
+  .settings(publishSettings)
 
 lazy val publishSettings = Seq(
   publishMavenStyle := true,
@@ -42,14 +45,27 @@ lazy val publishSettings = Seq(
     else
       Opts.resolver.sonatypeStaging
   )
-) ++ credentialSettings
-
-lazy val noPublishSettings = Seq(
-  publish := (),
-  publishLocal := (),
-  publishArtifact := false
 )
 
-//lazy val credentialSettings = Seq(
-//  credentials += Credentials(Path.userHome / ".sbt" / "1.0" /"sonatype.sbt")
+import ReleaseTransformations._
+
+releaseProcess := Seq[ReleaseStep](
+  checkSnapshotDependencies,
+  inquireVersions,
+  runClean,
+  runTest,
+  setReleaseVersion,
+  commitReleaseVersion,
+  tagRelease,
+  releaseStepCommand("publishSigned"),
+  setNextVersion,
+  commitNextVersion,
+  releaseStepCommand("sonatypeReleaseAll"),
+  pushChanges
+)
+
+//lazy val noPublishSettings = Seq(
+//  publish := (),
+//  publishLocal := (),
+//  publishArtifact := false
 //)

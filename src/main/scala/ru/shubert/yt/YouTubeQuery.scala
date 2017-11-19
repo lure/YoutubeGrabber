@@ -39,7 +39,10 @@ object YouTubeQuery extends Loggable {
   protected[yt] val ReqConfig: RequestConfig = RequestConfig.custom().setConnectionRequestTimeout(5000).setConnectTimeout(5000)
     .setRedirectsEnabled(true).build()
 
-  implicit val ordering: Ordering[NameValuePair] = (x: NameValuePair, y: NameValuePair) => x.getName.compare(y.getName)
+//  implicit val ordering: Ordering[NameValuePair] = (x: NameValuePair, y: NameValuePair) => x.getName.compare(y.getName)
+  implicit val ordering: Ordering[NameValuePair] = new Ordering[NameValuePair] {
+    override def compare(x: NameValuePair, y: NameValuePair) = x.getName.compare(y.getName)
+  }
 
   case class SingleStream(urlExploded: Array[String],  params: mutable.Buffer[NameValuePair])
   case class TagStream(itag: Try[String] = Failure(new YGParseException("itag not found")),
