@@ -16,9 +16,13 @@ libraryDependencies += "ru.shubert" %% "youtubegrabber" % "1.4"
 
 Maven 
 ```
+<properties>
+  ...
+  <scala.major>2.12</scala.major>
+</properties>
 <dependency>
   <groupId>ru.shubert</groupId>
-  <artifactId>youtubegrabber_2.12</artifactId>
+  <artifactId>youtubegrabber_${scala.major}</artifactId>
   <version>1.4</version>
 </dependency>
 ```
