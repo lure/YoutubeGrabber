@@ -12,12 +12,19 @@ be omitted from output map.
 Usage: 
 
 ```
-  Scala: new YouTubeQuery {
-      override protected implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
-  }.getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
+  Scala: YouTubeQuery
+    .getDefaultInstance()
+    .getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
   
+  or in a long form: 
+   new YouTubeQuery with Decipher {
+        override protected implicit val ec: ExecutionContext = 
+          scala.concurrent.ExecutionContext.Implicits.global
+    }.getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
   
-  Java: YouTubeQuery.getDefaultInstance().getJavaStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
+  Java: YouTubeQuery
+    .getDefaultInstance()
+    .getJavaStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
 ``` 
 
 Note that both calls return language-specific Future. This may change in next releases. 
