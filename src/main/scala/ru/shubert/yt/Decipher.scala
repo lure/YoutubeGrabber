@@ -2,24 +2,27 @@ package ru.shubert.yt
 
 import javax.script.{Invocable, ScriptEngineManager}
 
+import com.typesafe.scalalogging.StrictLogging
+
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{Await, Future}
-import scala.util.matching.Regex
-import scala.util.{Failure, Success, Try}
-import scala.concurrent.duration.Duration
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
+import scala.util.matching.{Regex, UnanchoredRegex}
 
 
 /**
   * Extracts and caches decode function from YouTube html5 player.
   * Uses JavaScript Engine to execute decoding function. It may be improved by caching desipher results and so on.
   */
-object Decipher extends Loggable {
-  private val FindProcName = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
-  private val ExtractSubProcName = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
-  private val ExternalFuncName = "decipher"
-  private val map = TrieMap[String, DecipherFunction]()
+trait Decipher extends StrictLogging {
+  import ru.shubert.yt.Decipher._
+  protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
   private lazy val factory = new ScriptEngineManager()
-  type DecipherFunction = Try[(String) ⇒ Try[String]]
+  protected implicit def ec: ExecutionContext
+  // player parsing regexps
+  protected lazy val FindProcName: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
+  protected lazy val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
+  protected lazy val ExternalFuncName: String = "decipher"
 
   /**
     * Downloads player, attempts to find decipher function and it's requirements, wrap it with
@@ -28,44 +31,28 @@ object Decipher extends Loggable {
     *
     * @param playerUrl    where to get player
     * @param downloadFunc which function to use to download player
-    * @return invocable function
+    * @return Invocable function
     */
   def registerPlayer(playerUrl: String, downloadFunc: (String) => Future[String]): DecipherFunction = {
-
-    def buildDecipher(t: String): Try[Invocable] = {
+    map.getOrElse(playerUrl, {
       val finalUrl: String = calculatePlayerUrl(playerUrl)
-      val playerCall = downloadFunc(finalUrl)
-      Await.ready(playerCall, Duration.Inf)
-      playerCall.value
-      for {
-        player <- playerCall.value.get
-        func ← buildDecipherFunc(player)
-      } yield func
-    }
-
-
-    map.get(playerUrl) match {
-      case Some(invoker) ⇒ invoker
-      case None ⇒
-        val invoker = buildDecipher(playerUrl)
-        val decipherFunction = invoker.flatMap(func ⇒ Try((sig: String) ⇒ Try(func.invokeFunction(ExternalFuncName, sig).toString)))
-        map.put(playerUrl, decipherFunction)
-        decipherFunction
-    }
+      val invoker = downloadFunc(finalUrl).map(buildDecipherFunc)
+      val decipherFunction = invoker.map(func ⇒ (sig: String) ⇒ func.invokeFunction(ExternalFuncName, sig).toString)
+      map.put(playerUrl, decipherFunction)
+      decipherFunction
+    })
   }
 
-  private def buildDecipherFunc(player: String): Try[Invocable] = {
-    for {
-      procName ← extractMainFuncName(player)
-      procBody ← extractMainFuncBody(player, procName)
-      sbBody ← extractSubProc(player, procBody)
-    } yield {
-      val result = s"$sbBody}; $procBody; function $ExternalFuncName(signature){ return $procName(signature); }"
-      LOG.debug("Final function: {}", result)
-      val engine = factory.getEngineByName("JavaScript")
-      engine.eval(result)
-      engine.asInstanceOf[Invocable]
-    }
+  private def buildDecipherFunc(player: String): Invocable = {
+    val procName = extractMainFuncName(player)
+    val procBody = extractMainFuncBody(player, procName)
+    val sbBody = extractSubProc(player, procBody)
+    val result = s"$sbBody}; $procBody; function $ExternalFuncName(signature){ return $procName(signature); }"
+
+    logger.debug("Final function: {}", result)
+    val engine = factory.getEngineByName("JavaScript")
+    engine.eval(result)
+    engine.asInstanceOf[Invocable]
   }
 
   /**
@@ -88,56 +75,51 @@ object Decipher extends Loggable {
     finalUrl
   }
 
-
-  val Unable_to_find_sub_proc_body = "Unable to find sub proc body"
-  val Unable_to_find_sub_proc_name = "Unable to find sub proc name"
-
-  private def extractSubProc(player: String, mainProcBody: String): Try[String] = {
+  private def extractSubProc(player: String, mainProcBody: String): String = {
     // decoding sub proc
     val sbNameRE = ExtractSubProcName.findAllIn(mainProcBody)
-    (if (sbNameRE.hasNext) {
+    if (sbNameRE.hasNext) {
       val subProcName = sbNameRE.group(1)
-      LOG.debug("Found sub proc name: {}", subProcName)
-      Success(subProcName)
-    } else {
-      LOG.debug(Unable_to_find_sub_proc_name)
-      Failure(new YGDecipherException(Unable_to_find_sub_proc_name))
-    }).flatMap { subProcName ⇒
+      logger.debug("Found sub proc name: {}", subProcName)
+
       val sbBodyRE = ("(?U)(var " + subProcName + """=\{.*?(?=\};))""").r.unanchored
       val sb = sbBodyRE.findAllIn(player)
       if (sb.hasNext) {
         val sbBody = sb.group(1)
-        LOG.debug("Found sub proc body: {}", sbBody)
-        Success(sbBody)
+        logger.debug("Found sub proc body: {}", sbBody)
+        sbBody
       } else {
-        LOG.debug(Unable_to_find_sub_proc_body)
-        Failure(new YGDecipherException(Unable_to_find_sub_proc_body))
+        logger.debug(unableToFindSubProcBody)
+        throw noSubProcBodyException
       }
+    } else {
+      logger.debug(unableToFindSubProcName)
+      throw noSubProcNameException
     }
   }
 
-  private def extractMainFuncName(player: String): Try[String] = Try {
+  private def extractMainFuncName(player: String): String = {
     val epl = FindProcName.findAllIn(player)
     if (epl.hasNext) {
       val procName = epl.group(1)
-      LOG.debug("Found main proc name: {}", procName)
+      logger.debug("Found main proc name: {}", procName)
       procName
     } else {
-      LOG.debug("Unable to find main proc name")
-      throw new YGDecipherException("Unable to find main proc name")
+      logger.debug(unableToFindProcName)
+      throw unableToFindProcNameException
     }
   }
 
-  private def extractMainFuncBody(player: String, procName: String): Try[String] = {
+  private def extractMainFuncBody(player: String, procName: String): String = {
     def extractBody(regex: Regex): Try[String] = Try {
       val proc = regex.findAllIn(player)
       if (proc.hasNext) {
         val b = proc.group(1)
-        LOG.debug("Found main proc body: {}", b)
+        logger.debug("Found main proc body: {}", b)
         b
       } else {
-        LOG.debug("Unable to find main proc body")
-        throw new YGDecipherException("Unable to find main proc body")
+        logger.debug(unableToFindProcBody)
+        throw unableToFindProcBodyExceptoin
       }
     }
 
@@ -147,7 +129,7 @@ object Decipher extends Loggable {
     // and this one is most recent
     def ExtractProc2017(procName: String) = ("(" + procName + """\s*\=\s*function[^}]*})""").r.unanchored
 
-    extractBody(ExtractProc2017(procName)).orElse(extractBody(ExtractProc2014(procName)))
+    extractBody(ExtractProc2017(procName)).orElse(extractBody(ExtractProc2014(procName))).get
   }
 
   /**
@@ -157,9 +139,23 @@ object Decipher extends Loggable {
     * @param playerUrl player url used as a key. No attemp to register
     * @return
     */
-  def decipher(playerUrl: String)(signature: String): Try[String] = {
+  def decipher(playerUrl: String)(signature: String): Future[String] = {
     map.get(playerUrl)
-      .map(invoke ⇒ invoke.flatMap(engine ⇒ engine(signature))
-      ).getOrElse(Failure(new YGDecipherException("No function exists")))
+      .map(invoke ⇒ invoke.map(engine ⇒ engine(signature))
+      ).getOrElse(Future.failed(functionMissingException))
   }
+}
+
+object Decipher {
+  type DecipherFunction = Future[(String) ⇒ String]
+  // just string and exception constants
+  val unableToFindSubProcBody = "Unable to find sub proc body"
+  val noSubProcBodyException = YGDecipherException(unableToFindSubProcBody)
+  val unableToFindSubProcName = "Unable to find sub proc name"
+  val noSubProcNameException = YGDecipherException(unableToFindSubProcName)
+  val unableToFindProcName = "Unable to find main proc name"
+  val unableToFindProcNameException = YGDecipherException(unableToFindProcName)
+  val unableToFindProcBody = "Unable to find main proc body"
+  val unableToFindProcBodyExceptoin = YGDecipherException("Unable to find main proc body")
+  val functionMissingException = YGDecipherException("No function exists")
 }
