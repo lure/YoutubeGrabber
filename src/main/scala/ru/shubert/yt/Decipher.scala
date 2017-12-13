@@ -17,7 +17,8 @@ import scala.util.matching.{Regex, UnanchoredRegex}
 trait Decipher extends StrictLogging {
   import ru.shubert.yt.Decipher._
   protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
-  protected lazy val factory = new ScriptEngineManager()
+  // dirty hack, read constructor declaration carefully
+  protected lazy val factory = new ScriptEngineManager(null)
   protected implicit def ec: ExecutionContext
   // player parsing regexps
   protected lazy val FindProcName: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
