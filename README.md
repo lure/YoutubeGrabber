@@ -31,7 +31,7 @@ Note that both calls return language-specific Future. This may change in next re
 
 sbt:
 ```
-libraryDependencies += "ru.shubert" %% "youtubegrabber" % "1.5"
+libraryDependencies += "ru.shubert" %% "youtubegrabber" % "1.6"
 ```
 
 Maven 
@@ -44,6 +44,6 @@ Maven
 <dependency>
   <groupId>ru.shubert</groupId>
   <artifactId>youtubegrabber_${scala.major}</artifactId>
-  <version>1.5</version>
+  <version>1.6</version>
 </dependency>
 ```
