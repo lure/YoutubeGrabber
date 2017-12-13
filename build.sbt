@@ -63,9 +63,3 @@ releaseProcess := Seq[ReleaseStep](
   releaseStepCommand("sonatypeReleaseAll"),
   pushChanges
 )
-
-//lazy val noPublishSettings = Seq(
-//  publish := (),
-//  publishLocal := (),
-//  publishArtifact := false
-//)
