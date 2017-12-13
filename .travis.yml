@@ -1,9 +1,9 @@
 language: scala
 scala:
-   - 2.11.7
+   - 2.12.3
 jdk:
   - oraclejdk8
-script: "mvn test"
+script: "sbt test"
 notifications:
     email:
         recipients:

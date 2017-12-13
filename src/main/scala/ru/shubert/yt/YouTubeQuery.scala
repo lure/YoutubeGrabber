@@ -45,7 +45,7 @@ trait YouTubeQuery extends StrictLogging {
 
   //noinspection ConvertExpressionToSAM
   //  implicit val ordering: Ordering[NameValuePair] = (x: NameValuePair, y: NameValuePair) => x.getName.compare(y.getName)
-  private implicit val ordering: Ordering[NameValuePair] = new Ordering[NameValuePair] {
+  protected implicit val ordering: Ordering[NameValuePair] = new Ordering[NameValuePair] {
     override def compare(x: NameValuePair, y: NameValuePair): Int = x.getName.compare(y.getName)
   }
 
@@ -82,7 +82,7 @@ trait YouTubeQuery extends StrictLogging {
     }
   }
 
-  private def MD5(value: String) = {
+  protected def MD5(value: String): String = {
     val md5 = MessageDigest.getInstance("MD5")
     md5.update(value.getBytes(StandardCharsets.UTF_8))
     md5.digest().take(5).map("%02x".format(_)).mkString
@@ -94,7 +94,7 @@ trait YouTubeQuery extends StrictLogging {
     * @param page where player should be found
     * @return json nodes wrapped in Success or Failure with exception
     */
-  private def getPlayerConfig(page: String): Future[JsonNode] = page match {
+  protected def getPlayerConfig(page: String): Future[JsonNode] = page match {
     case PlayerConfigRegex(streams) => Future(mapper.readTree(streams))
     case _ =>
       logger.error("Unable to extract player config from (first 300) " + page.take(300))
@@ -102,7 +102,7 @@ trait YouTubeQuery extends StrictLogging {
   }
 
   // Extract video+audio streams and converts from escaped to plain
-  private def extractStreamsUrl(cfg: JsonNode): Future[StreamsHolder] = {
+  protected def extractStreamsUrl(cfg: JsonNode): Future[StreamsHolder] = {
     val root = cfg.path("args")
 
     def extract(name: String, doc: JsonNode): Option[String] = Option(doc.path(name).asText(null)).map(StringEscapeUtils.unescapeJava)
@@ -119,7 +119,7 @@ trait YouTubeQuery extends StrictLogging {
     }
   }
 
-  private def getPlayerUrl(cfg: JsonNode): Future[String] =
+  protected def getPlayerUrl(cfg: JsonNode): Future[String] =
     Future(Option(cfg.path("assets").path("js").asText(null)).map(URLDecoder.decode(_, StandardCharsets.UTF_8.name())).getOrElse(unableToExtractJsException))
 
   /**
@@ -138,7 +138,7 @@ trait YouTubeQuery extends StrictLogging {
     * @param decipher decipher function
     * @return Map of videoType to url relations
     */
-  private def buildDownloadLinks(urls: String, decipher: String ⇒ String): Seq[(Int, String)] = {
+  protected def buildDownloadLinks(urls: String, decipher: String ⇒ String): Seq[(Int, String)] = {
     val md5 = MD5(urls)
     def getSingleStream(desc: String) = {
         // Why so complicate? Youtube servers rejects requests with : 1.duplicate tags (!!!), 2.with + replaced with ' ', 3.on some urldecodings.
@@ -244,5 +244,9 @@ object YouTubeQuery {
 
   def getDefaultInstance: YouTubeQuery = new YouTubeQuery with Decipher {
     override protected implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
+  }
+
+  def getDefaultInstance(context: ExecutionContext): YouTubeQuery = new YouTubeQuery with Decipher {
+    override protected implicit val ec: ExecutionContext = context
   }
 }

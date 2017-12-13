@@ -17,7 +17,7 @@ import scala.util.matching.{Regex, UnanchoredRegex}
 trait Decipher extends StrictLogging {
   import ru.shubert.yt.Decipher._
   protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
-  private lazy val factory = new ScriptEngineManager()
+  protected lazy val factory = new ScriptEngineManager()
   protected implicit def ec: ExecutionContext
   // player parsing regexps
   protected lazy val FindProcName: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
@@ -43,7 +43,7 @@ trait Decipher extends StrictLogging {
     })
   }
 
-  private def buildDecipherFunc(player: String): Invocable = {
+  protected def buildDecipherFunc(player: String): Invocable = {
     val procName = extractMainFuncName(player)
     val procBody = extractMainFuncBody(player, procName)
     val sbBody = extractSubProc(player, procBody)
@@ -62,7 +62,7 @@ trait Decipher extends StrictLogging {
     * @param playerUrl usually malformed url obtained from video page.
     * @return valid player download url
     */
-  private def calculatePlayerUrl(playerUrl: String) = {
+  protected def calculatePlayerUrl(playerUrl: String): String = {
     val finalUrl = if (playerUrl.startsWith("http")) {
       playerUrl
     } else {
@@ -75,7 +75,7 @@ trait Decipher extends StrictLogging {
     finalUrl
   }
 
-  private def extractSubProc(player: String, mainProcBody: String): String = {
+  protected def extractSubProc(player: String, mainProcBody: String): String = {
     // decoding sub proc
     val sbNameRE = ExtractSubProcName.findAllIn(mainProcBody)
     if (sbNameRE.hasNext) {
@@ -98,7 +98,7 @@ trait Decipher extends StrictLogging {
     }
   }
 
-  private def extractMainFuncName(player: String): String = {
+  protected def extractMainFuncName(player: String): String = {
     val epl = FindProcName.findAllIn(player)
     if (epl.hasNext) {
       val procName = epl.group(1)
@@ -110,7 +110,7 @@ trait Decipher extends StrictLogging {
     }
   }
 
-  private def extractMainFuncBody(player: String, procName: String): String = {
+  protected def extractMainFuncBody(player: String, procName: String): String = {
     def extractBody(regex: Regex): Try[String] = Try {
       val proc = regex.findAllIn(player)
       if (proc.hasNext) {
@@ -123,13 +123,14 @@ trait Decipher extends StrictLogging {
       }
     }
 
+    val cleanName = procName.replaceAll("\\$", """\\\$""")
     // this obfuscation result was used till 2017
-    def ExtractProc2014(procName: String) = ("""(function\s""" + procName + """[^}]*})""").r.unanchored
+    lazy val ExtractProc2014 = ("""(function\s""" + cleanName + """[^}]*})""").r.unanchored
 
     // and this one is most recent
-    def ExtractProc2017(procName: String) = ("(" + procName + """\s*\=\s*function[^}]*})""").r.unanchored
+    val ExtractProc2017= ("(" + cleanName + """\s*\=\s*function[^}]*})""").r.unanchored
 
-    extractBody(ExtractProc2017(procName)).orElse(extractBody(ExtractProc2014(procName))).get
+    extractBody(ExtractProc2017).orElse(extractBody(ExtractProc2014)).get
   }
 
   /**
