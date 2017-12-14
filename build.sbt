@@ -16,9 +16,9 @@ lazy val root = (project in file("."))
       apacheCommons,
       apacheHttp,
       jackson,
-      logbackClassic,
-      scalaLogging,
-      scalaTest % Test
+      slf4jApi,
+      logback,
+      scalaTest
     )
   )
   .settings(publishSettings)

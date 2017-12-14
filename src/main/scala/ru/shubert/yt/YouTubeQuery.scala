@@ -11,13 +11,12 @@ import scala.collection.JavaConverters._
 import _root_.org.apache.http.NameValuePair
 import _root_.org.apache.http.message.BasicNameValuePair
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import com.typesafe.scalalogging.StrictLogging
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.http.client.config.RequestConfig
 import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet}
 import org.apache.http.client.utils.{HttpClientUtils, URLEncodedUtils}
 import org.apache.http.impl.client.HttpClients
-
+import org.slf4j.LoggerFactory
 import scala.collection.mutable
 import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -33,7 +32,7 @@ import scala.util.{Failure, Success, Try}
   * normal `s=`  https://www.youtube.com/watch?v=UxxajLWwzqY | adaptive_fmts
   * normal `s=`  https://www.youtube.com/watch?v=8UVNT4wvIGY | url_encoded_fmt_stream_map
   */
-trait YouTubeQuery extends StrictLogging {
+trait YouTubeQuery {
   self: Decipher ⇒
   import YouTubeQuery._
 
@@ -238,14 +237,24 @@ trait YouTubeQuery extends StrictLogging {
 }
 
 object YouTubeQuery {
+  private val logger = LoggerFactory.getLogger(classOf[YouTubeQuery])
   lazy val defaultITag = Failure(YGParseException("itag not found"))
   lazy val defaultSignature = Failure(YGParseException("subscription not found"))
   lazy val unableToExtractJsException = throw YGParseException("Failed to extract js")
 
+  /**
+    * Creates new client instance using scala's `Implicits.global`
+    * @return youtube url client
+    */
   def getDefaultInstance: YouTubeQuery = new YouTubeQuery with Decipher {
     override protected implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
   }
 
+  /**
+    * returns new client using provided execution context
+    * @param context execution context to use
+    * @return
+    */
   def getDefaultInstance(context: ExecutionContext): YouTubeQuery = new YouTubeQuery with Decipher {
     override protected implicit val ec: ExecutionContext = context
   }

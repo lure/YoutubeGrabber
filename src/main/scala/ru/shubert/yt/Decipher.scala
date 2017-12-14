@@ -1,20 +1,18 @@
 package ru.shubert.yt
 
 import javax.script.{Invocable, ScriptEngineManager}
-
-import com.typesafe.scalalogging.StrictLogging
-
 import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 import scala.util.matching.{Regex, UnanchoredRegex}
+import org.slf4j.LoggerFactory
 
 
 /**
   * Extracts and caches decode function from YouTube html5 player.
   * Uses JavaScript Engine to execute decoding function. It may be improved by caching desipher results and so on.
   */
-trait Decipher extends StrictLogging {
+trait Decipher {
   import ru.shubert.yt.Decipher._
   protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
   // dirty hack, read constructor declaration carefully
@@ -149,6 +147,8 @@ trait Decipher extends StrictLogging {
 }
 
 object Decipher {
+  private val logger = LoggerFactory.getLogger(classOf[Decipher])
+
   type DecipherFunction = Future[(String) ⇒ String]
   // just string and exception constants
   val unableToFindSubProcBody = "Unable to find sub proc body"
