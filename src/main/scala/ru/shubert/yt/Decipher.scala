@@ -19,7 +19,8 @@ trait Decipher {
   protected lazy val factory = new ScriptEngineManager(null)
   protected implicit def ec: ExecutionContext
   // player parsing regexps
-  protected lazy val FindProcName: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
+  protected lazy val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
+  protected lazy val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
   protected lazy val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
   protected lazy val ExternalFuncName: String = "decipher"
 
@@ -98,15 +99,19 @@ trait Decipher {
   }
 
   protected def extractMainFuncName(player: String): String = {
-    val epl = FindProcName.findAllIn(player)
-    if (epl.hasNext) {
-      val procName = epl.group(1)
-      logger.debug("Found main proc name: {}", procName)
-      procName
-    } else {
-      logger.debug(unableToFindProcName)
-      throw unableToFindProcNameException
+    def extractBody(regex: Regex): Try[String] = Try {
+      val proc = regex.findAllIn(player)
+      if (proc.hasNext) {
+        val procName = proc.group(1)
+        logger.debug("Found main proc name: {}", procName)
+        procName
+      } else {
+        logger.debug(unableToFindProcName)
+        throw unableToFindProcNameException
+      }
     }
+
+    extractBody(FindProcName2015).orElse(extractBody(FindProcName2018)).get
   }
 
   protected def extractMainFuncBody(player: String, procName: String): String = {
