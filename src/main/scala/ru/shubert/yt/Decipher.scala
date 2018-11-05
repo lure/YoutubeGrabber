@@ -21,6 +21,7 @@ trait Decipher {
   // player parsing regexps
   protected lazy val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
   protected lazy val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
+  protected lazy val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(\"\"\);""".r.unanchored
   protected lazy val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
   protected lazy val ExternalFuncName: String = "decipher"
 
@@ -33,7 +34,7 @@ trait Decipher {
     * @param downloadFunc which function to use to download player
     * @return Invocable function
     */
-  def registerPlayer(playerUrl: String, downloadFunc: (String) => Future[String]): DecipherFunction = {
+  def registerPlayer(playerUrl: String, downloadFunc: String => Future[String]): DecipherFunction = {
     map.getOrElse(playerUrl, {
       val finalUrl: String = calculatePlayerUrl(playerUrl)
       val invoker = downloadFunc(finalUrl).map(buildDecipherFunc)
@@ -98,6 +99,7 @@ trait Decipher {
     }
   }
 
+  // 17285  \{\s*a\s*=\s*a.split\(""\)      (\w+)\s*=\s*function\s*\(\w+\)\s*\{\s*\w\s*=\s*a\.split\(""\);
   protected def extractMainFuncName(player: String): String = {
     def extractBody(regex: Regex): Try[String] = Try {
       val proc = regex.findAllIn(player)
@@ -111,7 +113,9 @@ trait Decipher {
       }
     }
 
-    extractBody(FindProcName2015).orElse(extractBody(FindProcName2018)).get
+    extractBody(FindProcName2018_2)
+      .orElse(extractBody(FindProcName2018))
+      .orElse(extractBody(FindProcName2015)).get
   }
 
   protected def extractMainFuncBody(player: String, procName: String): String = {
@@ -154,7 +158,7 @@ trait Decipher {
 object Decipher {
   private val logger = LoggerFactory.getLogger(classOf[Decipher])
 
-  type DecipherFunction = Future[(String) ⇒ String]
+  type DecipherFunction = Future[String ⇒ String]
   // just string and exception constants
   val unableToFindSubProcBody = "Unable to find sub proc body"
   val noSubProcBodyException = YGDecipherException(unableToFindSubProcBody)
