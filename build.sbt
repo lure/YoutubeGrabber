@@ -7,8 +7,8 @@ lazy val root = (project in file("."))
       name := "youtubegrabber",
       organization := "ru.shubert",
       description := "Youtube video grabber",
-      scalaVersion := "2.12.3",
-      crossScalaVersions := Seq("2.10.6", "2.11.8", "2.12.3"), //"2.13.0-M2" fails, see https://github.com/sbt/sbt/issues/3427
+      scalaVersion := "2.12.7",
+      crossScalaVersions := Seq("2.10.6", "2.11.8", "2.12.7"), //"2.13.0-M2" fails, see https://github.com/sbt/sbt/issues/3427
       isSnapshot := false
     ),
     libraryDependencies ++= Seq(
