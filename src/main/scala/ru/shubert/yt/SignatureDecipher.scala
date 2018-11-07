@@ -1,23 +1,27 @@
 package ru.shubert.yt
 
 import javax.script.{Invocable, ScriptEngineManager}
+
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 import scala.util.matching.{Regex, UnanchoredRegex}
 import org.slf4j.LoggerFactory
-
+import cats.MonadError
+import cats.implicits._
+import scala.language.higherKinds
 
 /**
   * Extracts and caches decode function from YouTube html5 player.
   * Uses JavaScript Engine to execute decoding function. It may be improved by caching desipher results and so on.
   */
-trait Decipher {
-  import ru.shubert.yt.Decipher._
+class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
+  import SignatureDecipher._
+
+  type DecipherFunction = F[String ⇒ String]
+
   protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
   // dirty hack, read constructor declaration carefully
   protected lazy val factory = new ScriptEngineManager(null)
-  protected implicit def ec: ExecutionContext
   // player parsing regexps
   protected lazy val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
   protected lazy val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
@@ -34,7 +38,7 @@ trait Decipher {
     * @param downloadFunc which function to use to download player
     * @return Invocable function
     */
-  def registerPlayer(playerUrl: String, downloadFunc: String => Future[String]): DecipherFunction = {
+  def registerPlayer(playerUrl: String, downloadFunc: String => F[String]): DecipherFunction = {
     map.getOrElse(playerUrl, {
       val finalUrl: String = calculatePlayerUrl(playerUrl)
       val invoker = downloadFunc(finalUrl).map(buildDecipherFunc)
@@ -148,17 +152,16 @@ trait Decipher {
     * @param playerUrl player url used as a key. No attemp to register
     * @return
     */
-  def decipher(playerUrl: String)(signature: String): Future[String] = {
+  def decipher(playerUrl: String)(signature: String): F[String] = {
     map.get(playerUrl)
       .map(invoke ⇒ invoke.map(engine ⇒ engine(signature))
-      ).getOrElse(Future.failed(functionMissingException))
+      ).getOrElse(M.raiseError(functionMissingException))
   }
 }
 
-object Decipher {
-  private val logger = LoggerFactory.getLogger(classOf[Decipher])
+object SignatureDecipher {
+  private val logger = LoggerFactory.getLogger(getClass)
 
-  type DecipherFunction = Future[String ⇒ String]
   // just string and exception constants
   val unableToFindSubProcBody = "Unable to find sub proc body"
   val noSubProcBodyException = YGDecipherException(unableToFindSubProcBody)

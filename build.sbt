@@ -1,20 +1,21 @@
 import Dependencies._
 
-
+val mainScala = "2.12.7"
 lazy val root = (project in file("."))
   .settings(
     List(
       name := "youtubegrabber",
       organization := "ru.shubert",
       description := "Youtube video grabber",
-      scalaVersion := "2.12.7",
-      crossScalaVersions := Seq("2.10.6", "2.11.8", "2.12.7"), //"2.13.0-M2" fails, see https://github.com/sbt/sbt/issues/3427
+      scalaVersion := mainScala,
+      crossScalaVersions := Seq("2.10.6", "2.11.8", mainScala), //"2.13.0-M2" fails, see https://github.com/sbt/sbt/issues/3427
       isSnapshot := false
     ),
     libraryDependencies ++= Seq(
       apacheCommons,
       apacheHttp,
       jackson,
+      cats,
       slf4jApi,
       logback,
       scalaTest

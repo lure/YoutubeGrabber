@@ -1,12 +1,15 @@
 package ru.shubert.yt
 
+import cats.implicits._
 import org.apache.http.client.methods.HttpHead
 import org.apache.http.client.utils.HttpClientUtils
 import org.apache.http.impl.client.HttpClients
+import org.scalatest.TryValues._
 import org.scalatest.{FlatSpecLike, Matchers}
 
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.Duration
+import scala.util.Try
 import scala.util.matching.UnanchoredRegex
 
 /**
@@ -14,36 +17,31 @@ import scala.util.matching.UnanchoredRegex
   * failing to do so means something changed and either test either extractor should be updated.
   * Author: Alexandr Shubert
   */
-class StreamValidTest extends FlatSpecLike with Matchers with YouTubeQuery with Decipher {
+class StreamValidTest extends FlatSpecLike with Matchers {
   // YouTube's TopStories news channel
   val NewsChannel = "https://www.youtube.com/playlist?list=PL3ZQ5CpNulQnKJW0h8LQ3fJzgM34nLCxu"
   val TopVideoRE: UnanchoredRegex = """href="(/watch\?v=[^"]*)""".r.unanchored
   val HttpsYouTubeCom = "https://www.youtube.com"
-  override protected implicit val ec: ExecutionContext = scala.concurrent.ExecutionContext.Implicits.global
 
   "download method" should "return downloaded page" in {
-    val future = readStringFromUrl(NewsChannel)
-    val result = Await.result(future, Duration.Inf)
-    result should startWith regex "\\s*<!DOCTYPE html><html"
+    val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
+    ytq.readStringFromUrl(NewsChannel).success.value should startWith regex "\\s*<!DOCTYPE html><html"
   }
 
   "All found stream urls" should "be accessible" in {
-    val news = readStringFromUrl(NewsChannel)
-    val newsLine = Await.result(news, Duration.Inf)
+    val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
+    val newsLine = ytq.readStringFromUrl(NewsChannel)
 
-    TopVideoRE.findFirstMatchIn(newsLine) match {
+    TopVideoRE.findFirstMatchIn(newsLine.success.get) match {
       case Some(u) =>
         val client = HttpClients.createDefault()
         val topVideoUrl = HttpsYouTubeCom + u.group(1)
 
-        val future = getStreams(topVideoUrl)
-
-        val mapResult = Await.result(future, Duration.Inf)
-
+        val mapResult = ytq.getStreams(topVideoUrl).success.get
         val errors = mapResult.foldLeft(List.empty[String]) {
           case (acc, (_, link)) =>
             val headMethod = new HttpHead(link)
-            headMethod.setConfig(ReqConfig)
+            headMethod.setConfig(ytq.ReqConfig)
             try {
               val status = client.execute(headMethod).getStatusLine.getStatusCode
               if (status != 200) {
@@ -61,4 +59,13 @@ class StreamValidTest extends FlatSpecLike with Matchers with YouTubeQuery with 
       case _ => fail("Unable to extract top video url. Fix the test pls!")
     }
   }
+
+  "future subsctitution" should "should work" in {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val ytq: YouTubeQuery[Future] = new YouTubeQuery[Future]
+    val future = ytq.readStringFromUrl(NewsChannel)
+    val result = Await.result(future, Duration.Inf)
+    result should startWith regex "\\s*<!DOCTYPE html><html"
+  }
+
 }
