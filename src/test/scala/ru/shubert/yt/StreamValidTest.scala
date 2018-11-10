@@ -1,6 +1,7 @@
 package ru.shubert.yt
 
 import cats.implicits._
+import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.http.client.methods.HttpHead
 import org.apache.http.client.utils.HttpClientUtils
 import org.apache.http.impl.client.HttpClients
@@ -20,52 +21,57 @@ import scala.util.matching.UnanchoredRegex
 class StreamValidTest extends FlatSpecLike with Matchers {
   // YouTube's TopStories news channel
   val NewsChannel = "https://www.youtube.com/playlist?list=PL3ZQ5CpNulQnKJW0h8LQ3fJzgM34nLCxu"
-  val TopVideoRE: UnanchoredRegex = """href="(/watch\?v=[^"]*)""".r.unanchored
+  val TopVideoRE: UnanchoredRegex = """(?:(?:href=)|(?:url":))"(\/watch\?v=[^"]*)""".r.unanchored
   val HttpsYouTubeCom = "https://www.youtube.com"
 
   "download method" should "return downloaded page" in {
     val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
-    ytq.readStringFromUrl(NewsChannel).success.value should startWith regex "\\s*<!DOCTYPE html><html"
+    ytq.readStringFromUrl(NewsChannel).success.value should startWith regex "\\s*(?i)<!DOCTYPE html><html"
   }
 
-  "All found stream urls" should "be accessible" in {
+  it should "handle Future* container" in {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    val ytq: YouTubeQuery[Future] = new YouTubeQuery[Future]
+    val result = Await.result(ytq.readStringFromUrl(NewsChannel), Duration.Inf)
+    result should startWith regex "\\s*(?i)<!DOCTYPE html><html"
+  }
+
+
+  "Decipher" should "handle news feed" in {
     val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
     val newsLine = ytq.readStringFromUrl(NewsChannel)
-
     TopVideoRE.findFirstMatchIn(newsLine.success.get) match {
       case Some(u) =>
-        val client = HttpClients.createDefault()
-        val topVideoUrl = HttpsYouTubeCom + u.group(1)
-
-        val mapResult = ytq.getStreams(topVideoUrl).success.get
-        val errors = mapResult.foldLeft(List.empty[String]) {
-          case (acc, (_, link)) =>
-            val headMethod = new HttpHead(link)
-            headMethod.setConfig(ytq.ReqConfig)
-            try {
-              val status = client.execute(headMethod).getStatusLine.getStatusCode
-              if (status != 200) {
-                s"$link returned status $status" :: acc
-              } else {
-                acc
-              }
-            } catch {
-              case e: Exception => s"$topVideoUrl produced exception ${e.getMessage}" :: acc
-            }
-        }
-        HttpClientUtils.closeQuietly(client)
-        errors shouldBe 'empty
-
-      case _ => fail("Unable to extract top video url. Fix the test pls!")
+        val topVideoUrl = HttpsYouTubeCom + StringEscapeUtils.unescapeJava(u.group(1))
+        testExtraction(ytq, topVideoUrl, 15)
+      case _ => fail("News feed format has changed!")
     }
   }
 
-  "future subsctitution" should "should work" in {
-    import scala.concurrent.ExecutionContext.Implicits.global
-    val ytq: YouTubeQuery[Future] = new YouTubeQuery[Future]
-    val future = ytq.readStringFromUrl(NewsChannel)
-    val result = Await.result(future, Duration.Inf)
-    result should startWith regex "\\s*<!DOCTYPE html><html"
+  it should "handle 4k feed" in {
+    testExtraction(new YouTubeQuery[Try], "https://www.youtube.com/watch?v=9Yam5B_iasY", 24)
   }
 
+  private def testExtraction(ytq: YouTubeQuery[Try], url: String, count: Int) = {
+    val client = HttpClients.createDefault()
+    val mapResult = ytq.getStreams(url).success.get
+    mapResult.size should be >= count
+    val errors = mapResult.foldLeft(List.empty[String]) {
+      case (acc, (_, link)) =>
+        val headMethod = new HttpHead(link)
+        headMethod.setConfig(ytq.ReqConfig)
+        try {
+          val status = client.execute(headMethod).getStatusLine.getStatusCode
+          if (status != 200) {
+            s"$link returned status $status" :: acc
+          } else {
+            acc
+          }
+        } catch {
+          case e: Exception => s"$url produced exception ${e.getMessage}" :: acc
+        }
+    }
+    HttpClientUtils.closeQuietly(client)
+    errors shouldBe 'empty
+  }
 }

@@ -36,7 +36,7 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
 
   import YouTubeQuery._
 
-  protected lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/30.0.0.0 Safari/537.11 Firefox/34.0"
+  protected lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12) AppleWebKit/602.1.50 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36 Firefox/62.0"
   protected lazy val mapper = new ObjectMapper()
   protected lazy val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
   protected[yt] val ReqConfig: RequestConfig = RequestConfig.custom().setConnectionRequestTimeout(5000).setConnectTimeout(5000).setRedirectsEnabled(true).build()
@@ -187,7 +187,6 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     }
   }
 
-
   /**
     * Parse streams from whole page represented by string.
     *
@@ -226,12 +225,12 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     */
   def getStreams(url: String): F[Map[Int, String]] = readStringFromUrl(url).flatMap(getStreamsFromString)
 
-  /**
-    * same as getStreams, but returns empty java map if nothing found
-    *
-    * @param url video url from youtube
-    * @return map of type to url
-    */
+  //  /**
+  //   * same as getStreams, but returns empty java map if nothing found
+  //   *
+  //   * @param url video url from youtube
+  //   * @return map of type to url
+  //   */
   //  def getJavaStreams(url: String): JFuture[JMap[Int, String]] = {
   //    class MyFuture(future: F[Map[Int, String]]) extends JFuture[JMap[Int, String]] {
   //      override def cancel(mayInterruptIfRunning: Boolean): Boolean = throw new NotImplementedError

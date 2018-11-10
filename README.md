@@ -12,26 +12,23 @@ be omitted from output map.
 Usage: 
 
 ```
-  Scala: YouTubeQuery
-    .getDefaultInstance()
-    .getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
-  
-  or in a long form: 
-   new YouTubeQuery with Decipher {
-        override protected implicit val ec: ExecutionContext = 
-          scala.concurrent.ExecutionContext.Implicits.global
-    }.getStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
-  
-  Java: YouTubeQuery
-    .getDefaultInstance()
-    .getJavaStreams("https://www.youtube.com/watch?v=tO01J-M3g0U")
+  import cats.implicits._
+  val grabber = new YouTubeQuery[Try]
+  // or
+  val grabber = {
+    import scala.concurrent.ExecutionContext.Implicits.global
+    new YouTubeQuery[Future]
+  }
+
+  grabberTry.getStreams(topVideoUrl) // handle the result    
+ 
 ``` 
 
 Note that both calls return language-specific Future. This may change in next releases. 
 
 sbt:
 ```
-libraryDependencies += "ru.shubert" %% "youtubegrabber" % "1.7"
+libraryDependencies += "ru.shubert" %% "youtubegrabber" % "1.9"
 ```
 
 Maven 
@@ -44,6 +41,6 @@ Maven
 <dependency>
   <groupId>ru.shubert</groupId>
   <artifactId>youtubegrabber_${scala.major}</artifactId>
-  <version>1.7</version>
+  <version>1.9</version>
 </dependency>
 ```
