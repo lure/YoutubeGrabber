@@ -1,4 +1,7 @@
-# YoutubeGrabber [![Build Status](https://travis-ci.org/lure/YoutubeGrabber.svg?branch=master)](https://travis-ci.org/lure/YoutubeGrabber)
+# YoutubeGrabber 
+[![Build Status](https://travis-ci.org/lure/YoutubeGrabber.svg?branch=master)](https://travis-ci.org/lure/YoutubeGrabber)
+[![Maven Central](https://img.shields.io/maven-central/v/ru.shubert/youtubegrabber_2.12.svg)](https://maven-badges.herokuapp.com/maven-central/ru.shubert/youtubegrabber_2.12)
+
 
 Module that extracts downloadable video and audio streams from youtube. Basically you want exactly one you `YouTubeQuery` 
 instance across all your application, as decipher engine may be somewhat costly to create and keep around in multiple instances.
