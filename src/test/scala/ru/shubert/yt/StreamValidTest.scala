@@ -43,7 +43,7 @@ class StreamValidTest extends FlatSpecLike with Matchers {
     TopVideoRE.findFirstMatchIn(newsLine.success.get) match {
       case Some(u) =>
         val topVideoUrl = HttpsYouTubeCom + StringEscapeUtils.unescapeJava(u.group(1))
-        testExtraction(ytq, topVideoUrl, 15)
+        testExtraction(ytq, topVideoUrl, 8)
       case _ => fail("News feed format has changed!")
     }
   }
