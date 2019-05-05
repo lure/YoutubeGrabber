@@ -20,7 +20,7 @@ import scala.util.matching.UnanchoredRegex
   */
 class StreamValidTest extends FlatSpecLike with Matchers {
   // YouTube's TopStories news channel
-  val NewsChannel = "https://www.youtube.com/playlist?list=PL3ZQ5CpNulQnKJW0h8LQ3fJzgM34nLCxu"
+  val NewsChannel = "https://www.youtube.com/"
   val TopVideoRE: UnanchoredRegex = """(?:(?:href=)|(?:url":))"(\/watch\?v=[^"]*)""".r.unanchored
   val HttpsYouTubeCom = "https://www.youtube.com"
 
