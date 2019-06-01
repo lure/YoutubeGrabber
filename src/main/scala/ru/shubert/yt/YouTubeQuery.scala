@@ -11,17 +11,16 @@ import _root_.org.apache.http.message.BasicNameValuePair
 import cats.MonadError
 import cats.implicits._
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import org.apache.commons.lang3.StringEscapeUtils
+import com.typesafe.scalalogging.Logger
 import org.apache.http.client.config.RequestConfig
 import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet}
 import org.apache.http.client.utils.{HttpClientUtils, URLEncodedUtils}
 import org.apache.http.impl.client.HttpClients
-import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
-import scala.language.higherKinds
 import scala.util.matching.UnanchoredRegex
 import scala.util.{Failure, Success, Try}
+import scala.language.higherKinds
 
 /**
   * YouTube obscures download links, requiring urls with special signature in it.
@@ -106,7 +105,9 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
   protected def extractStreamsUrl(cfg: JsonNode): F[StreamsHolder] = {
     val root = cfg.path("args")
 
-    def extract(name: String, doc: JsonNode): Option[String] = Option(doc.path(name).asText(null)).map(StringEscapeUtils.unescapeJava)
+    def extract(name: String, doc: JsonNode): Option[String] = {
+      Option(doc.path(name).asText(null)).map(StringContext.treatEscapes)
+    }
 
     val vf = M.catchNonFatal(extract("url_encoded_fmt_stream_map", root))
     val af = M.catchNonFatal(extract("adaptive_fmts", root))
@@ -244,7 +245,7 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
 }
 
 object YouTubeQuery {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val logger = Logger(getClass)
   lazy val defaultITag = Failure(YGParseException("itag not found"))
   lazy val defaultSignature = Failure(YGParseException("subscription not found"))
   lazy val unableToExtractJsException = throw YGParseException("Failed to extract js")

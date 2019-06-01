@@ -5,9 +5,10 @@ import javax.script.{Invocable, ScriptEngineManager}
 import scala.collection.concurrent.TrieMap
 import scala.util.Try
 import scala.util.matching.{Regex, UnanchoredRegex}
-import org.slf4j.LoggerFactory
 import cats.MonadError
 import cats.implicits._
+import com.typesafe.scalalogging.Logger
+
 import scala.language.higherKinds
 
 /**
@@ -20,14 +21,6 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
   type DecipherFunction = F[String ⇒ String]
 
   protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
-  // dirty hack, read constructor declaration carefully
-  protected lazy val factory = new ScriptEngineManager(null)
-  // player parsing regexps
-  protected lazy val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
-  protected lazy val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
-  protected lazy val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(\"\"\);""".r.unanchored
-  protected lazy val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
-  protected lazy val ExternalFuncName: String = "decipher"
 
   /**
     * Downloads player, attempts to find decipher function and it's requirements, wrap it with
@@ -39,6 +32,7 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
     * @return Invocable function
     */
   def registerPlayer(playerUrl: String, downloadFunc: String => F[String]): DecipherFunction = {
+    import cats.syntax.all._
     map.getOrElse(playerUrl, {
       val finalUrl: String = calculatePlayerUrl(playerUrl)
       val invoker = downloadFunc(finalUrl).map(buildDecipherFunc)
@@ -68,7 +62,7 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
     * @return valid player download url
     */
   protected def calculatePlayerUrl(playerUrl: String): String = {
-    val finalUrl = if (playerUrl.startsWith("http")) {
+    if (playerUrl.startsWith("http")) {
       playerUrl
     } else {
       if (playerUrl.startsWith("//youtube.com/")) {
@@ -77,7 +71,6 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
         "https://www.youtube.com" + playerUrl
       }
     }
-    finalUrl
   }
 
   protected def extractSubProc(player: String, mainProcBody: String): String = {
@@ -160,7 +153,16 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
 }
 
 object SignatureDecipher {
-  private val logger = LoggerFactory.getLogger(getClass)
+
+  private val logger = Logger(getClass)
+  // dirty hack, read constructor declaration carefully
+  protected lazy val factory = new ScriptEngineManager(null)
+  // player parsing regexps
+  protected val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
+  protected val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
+  protected val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(\"\"\);""".r.unanchored
+  protected val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
+  protected val ExternalFuncName: String = "decipher"
 
   // just string and exception constants
   val unableToFindSubProcBody = "Unable to find sub proc body"

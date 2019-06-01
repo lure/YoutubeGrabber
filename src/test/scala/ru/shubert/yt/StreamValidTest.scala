@@ -37,16 +37,16 @@ class StreamValidTest extends FlatSpecLike with Matchers {
   }
 
 
-  "Decipher" should "handle news feed" in {
-    val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
-    val newsLine = ytq.readStringFromUrl(NewsChannel)
-    TopVideoRE.findFirstMatchIn(newsLine.success.get) match {
-      case Some(u) =>
-        val topVideoUrl = HttpsYouTubeCom + StringEscapeUtils.unescapeJava(u.group(1))
-        testExtraction(ytq, topVideoUrl, 8)
-      case _ => fail("News feed format has changed!")
-    }
-  }
+//  "Decipher" should "handle news feed" in {
+//    val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
+//    val newsLine = ytq.readStringFromUrl(NewsChannel)
+//    TopVideoRE.findFirstMatchIn(newsLine.success.get) match {
+//      case Some(u) =>
+//        val topVideoUrl = HttpsYouTubeCom + StringEscapeUtils.unescapeJava(u.group(1))
+//        testExtraction(ytq, topVideoUrl, 8)
+//      case _ => fail("News feed format has changed!")
+//    }
+//  }
 
   it should "handle 4k feed" in {
     testExtraction(new YouTubeQuery[Try], "https://www.youtube.com/watch?v=9Yam5B_iasY", 24)
