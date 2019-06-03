@@ -8,28 +8,34 @@ instance across all your application, as decipher engine may be somewhat costly 
 Sometimes streams are protected by different signature type and in some cases for very new player.js or obfuscation methods 
 this implementation may be unable to decrypt signature. in that case appropriate message will be logged and stream will 
 be omitted from output map.
-
-
-`YouTubeConstants` holds a dictionary of known (to me) stream types, use it to render basic information to user if needed.   
  
-Usage: 
+
+
+**Usage:** 
+
+To use the grabber, you'll need to provide any biased container, or anything for what MonadError typeclass implementation exists / may be implemented.
 
 ```
   import cats.implicits._
   val grabber = new YouTubeQuery[Try]
   // or
   val grabber = {
-    import scala.concurrent.ExecutionContext.Implicits.global
-    new YouTubeQuery[Future]
+    import monix.eval.Task
+    new YouTubeQuery[Task]
   }
-
-  grabberTry.getStreams(topVideoUrl) // handle the result    
- 
+  // and now 
+  for { 
+    streams <- grabber.getStreams(topVideoUrl) // handle the result    
+    _ <- doSomething(streams)
+  } yield ... 
 ``` 
 
-Note that both calls return language-specific Future. This may change in next releases. 
+`YouTubeConstants.scala` holds a dictionary of known stream types, use it to render basic information to user if needed.   
+
+**Adding things to projects:**
 
 sbt:
+
 ```
 libraryDependencies += "ru.shubert" %% "youtubegrabber" % "2.0"
 ```
