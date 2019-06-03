@@ -4,8 +4,8 @@
       <pattern>%d %-5p [%c{1}] %m %n</pattern>
     </encoder>
   </appender>
-  <logger name="ru.shubert" level="warn"/>
-  <root level="ERROR">
+  <logger name="ru.shubert" level="debug"/>
+  <root level="debug">
     <appender-ref ref="stdout"/>
   </root>
 </configuration>

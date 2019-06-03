@@ -1,15 +1,11 @@
 package ru.shubert.yt
 
 import cats.implicits._
-import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.http.client.methods.HttpHead
 import org.apache.http.client.utils.HttpClientUtils
 import org.apache.http.impl.client.HttpClients
 import org.scalatest.TryValues._
 import org.scalatest.{FlatSpecLike, Matchers}
-
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
 import scala.util.Try
 import scala.util.matching.UnanchoredRegex
 
@@ -27,25 +23,6 @@ class StreamValidTest extends FlatSpecLike with Matchers {
   "download method" should "return downloaded page" in {
     val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
     ytq.readStringFromUrl(NewsChannel).success.value should startWith regex "\\s*(?i)<!DOCTYPE html><html"
-  }
-
-  it should "handle Future* container" in {
-    import scala.concurrent.ExecutionContext.Implicits.global
-    val ytq: YouTubeQuery[Future] = new YouTubeQuery[Future]
-    val result = Await.result(ytq.readStringFromUrl(NewsChannel), Duration.Inf)
-    result should startWith regex "\\s*(?i)<!DOCTYPE html><html"
-  }
-
-
-  "Decipher" should "handle news feed" in {
-    val ytq: YouTubeQuery[Try] = new YouTubeQuery[Try]
-    val newsLine = ytq.readStringFromUrl(NewsChannel)
-    TopVideoRE.findFirstMatchIn(newsLine.success.get) match {
-      case Some(u) =>
-        val topVideoUrl = HttpsYouTubeCom + StringEscapeUtils.unescapeJava(u.group(1))
-        testExtraction(ytq, topVideoUrl, 8)
-      case _ => fail("News feed format has changed!")
-    }
   }
 
   it should "handle 4k feed" in {
@@ -72,6 +49,8 @@ class StreamValidTest extends FlatSpecLike with Matchers {
         }
     }
     HttpClientUtils.closeQuietly(client)
+
+    println(s"Found ${mapResult.size} streams, errored: ${errors.size}")
     errors shouldBe 'empty
   }
 }

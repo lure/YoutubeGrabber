@@ -12,13 +12,13 @@ lazy val root = (project in file("."))
       isSnapshot := false
     ),
     libraryDependencies ++= Seq(
-      apacheCommons,
       apacheHttp,
-      jackson,
+      jsonParser,
       cats,
-      slf4jApi,
+      logging,
       logback,
-      scalaTest
+      scalaTest,
+
     )
   )
   .settings(publishSettings)

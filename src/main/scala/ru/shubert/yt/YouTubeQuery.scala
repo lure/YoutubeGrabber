@@ -6,22 +6,24 @@ import _root_.java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
 import scala.collection.JavaConverters._
-import _root_.org.apache.http.NameValuePair
-import _root_.org.apache.http.message.BasicNameValuePair
 import cats.MonadError
 import cats.implicits._
-import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
-import org.apache.commons.lang3.StringEscapeUtils
+import com.typesafe.scalalogging.Logger
+import _root_.org.apache.http.NameValuePair
+import _root_.org.apache.http.message.BasicNameValuePair
+import io.circe.HCursor
+
 import org.apache.http.client.config.RequestConfig
 import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet}
 import org.apache.http.client.utils.{HttpClientUtils, URLEncodedUtils}
 import org.apache.http.impl.client.HttpClients
-import org.slf4j.LoggerFactory
 
 import scala.collection.mutable
-import scala.language.higherKinds
 import scala.util.matching.UnanchoredRegex
 import scala.util.{Failure, Success, Try}
+import scala.language.higherKinds
+
+import io.circe._, io.circe.parser._
 
 /**
   * YouTube obscures download links, requiring urls with special signature in it.
@@ -36,9 +38,6 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
 
   import YouTubeQuery._
 
-  protected lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12) AppleWebKit/602.1.50 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36 Firefox/62.0"
-  protected lazy val mapper = new ObjectMapper()
-  protected lazy val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
   protected[yt] val ReqConfig: RequestConfig = RequestConfig.custom().setConnectionRequestTimeout(5000).setConnectTimeout(5000).setRedirectsEnabled(true).build()
 
   //noinspection ConvertExpressionToSAM
@@ -62,6 +61,7 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
 
       val client = HttpClients.createDefault()
       var resp: CloseableHttpResponse = null
+
       try {
         resp = client.execute(method)
         val status = resp.getStatusLine.getStatusCode
@@ -95,19 +95,29 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     * @param page where player should be found
     * @return json nodes wrapped in Success or Failure with exception
     */
-  protected def getPlayerConfig(page: String): F[JsonNode] = page match {
-    case PlayerConfigRegex(streams) => M.pure(mapper.readTree(streams))
+  protected def getPlayerConfig(page: String): F[HCursor] = page match {
+    case PlayerConfigRegex(streams) =>
+      M.pure(parse(streams).getOrElse(Json.Null).hcursor)
     case _ =>
       logger.error("Unable to extract player config from (first 300) " + page.take(300))
       M.raiseError(YGParseException("Player script was changed: " + page))
   }
 
   // Extract video+audio streams and converts from escaped to plain
-  protected def extractStreamsUrl(cfg: JsonNode): F[StreamsHolder] = {
-    val root = cfg.path("args")
+  protected def extractStreamsUrl(cfg: HCursor): F[StreamsHolder] = {
+    //TODO: lost exception
+    import cats.implicits._
+    def extract(name: String, doc: ACursor): Option[String] = {
+      doc.get[String](name).bimap(
+        e => {
+          logger.error(s"Failed to extract $name", e)
+          e
+        },
+        StringContext.treatEscapes)
+        .toOption
+    }
 
-    def extract(name: String, doc: JsonNode): Option[String] = Option(doc.path(name).asText(null)).map(StringEscapeUtils.unescapeJava)
-
+    val root = cfg.downField("args")
     val vf = M.catchNonFatal(extract("url_encoded_fmt_stream_map", root))
     val af = M.catchNonFatal(extract("adaptive_fmts", root))
 
@@ -115,17 +125,16 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
       video ← vf
       adaptive ← af
     } yield {
-      logger.trace("Video streams?: {} \n adaptive? {}", video.isDefined, adaptive.isDefined)
+      logger.debug("Video streams?: {} \n adaptive? {}", video.isDefined, adaptive.isDefined)
       StreamsHolder(video, adaptive)
     }
   }
 
-  protected def getPlayerUrl(cfg: JsonNode): F[String] =
-    M.pure(Option(cfg.path("assets")
-      .path("js")
-      .asText(null))
-      .map(URLDecoder.decode(_, StandardCharsets.UTF_8.name()))
-      .getOrElse(unableToExtractJsException))
+  protected def getPlayerUrl(cfg: HCursor): F[String] =
+    M.fromEither(cfg.downField("assets")
+      .get[String]("js")
+      .map(URLDecoder.decode(_, StandardCharsets.UTF_8.name())))
+
 
   /**
     * Each stream is described by [header][\s][url with some params]
@@ -224,27 +233,12 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     * @return option contains map of type to video url
     */
   def getStreams(url: String): F[Map[Int, String]] = readStringFromUrl(url).flatMap(getStreamsFromString)
-
-  //  /**
-  //   * same as getStreams, but returns empty java map if nothing found
-  //   *
-  //   * @param url video url from youtube
-  //   * @return map of type to url
-  //   */
-  //  def getJavaStreams(url: String): JFuture[JMap[Int, String]] = {
-  //    class MyFuture(future: F[Map[Int, String]]) extends JFuture[JMap[Int, String]] {
-  //      override def cancel(mayInterruptIfRunning: Boolean): Boolean = throw new NotImplementedError
-  //      override def isCancelled: Boolean = false
-  //      override def isDone: Boolean = future.isCompleted
-  //      override def get(): JMap[Int, String] = Await.result(future, Duration.Inf).asJava
-  //      override def get(timeout: Long, unit: TimeUnit): JMap[Int, String] = Await.result(future, FiniteDuration(timeout, unit)).asJava
-  //    }
-  //    new MyFuture(getStreams(url))
-  //  }
 }
 
 object YouTubeQuery {
-  private val logger = LoggerFactory.getLogger(getClass)
+  private val logger = Logger(getClass.getName)
+  lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12) AppleWebKit/602.1.50 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36 Firefox/62.0"
+  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
   lazy val defaultITag = Failure(YGParseException("itag not found"))
   lazy val defaultSignature = Failure(YGParseException("subscription not found"))
   lazy val unableToExtractJsException = throw YGParseException("Failed to extract js")
