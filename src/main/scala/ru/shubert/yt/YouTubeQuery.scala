@@ -188,7 +188,7 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
         tag ← taggedStream.itag
         sig ← taggedStream.signature
       } yield {
-        taggedStream.params.add(new BasicNameValuePair("signature", sig))
+        taggedStream.params.add(new BasicNameValuePair("sig", sig))
         taggedStream.params.add(new BasicNameValuePair("itag", tag))
         val link = urlExploded(0) + "?" + URLEncodedUtils.format(taggedStream.params.toList.asJava, StandardCharsets.UTF_8)
         tag.toInt -> link
