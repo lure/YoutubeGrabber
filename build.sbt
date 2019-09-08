@@ -1,6 +1,6 @@
 import Dependencies._
 
-val mainScala = "2.12.7"
+val mainScala = "2.12.9"
 lazy val root = (project in file("."))
   .settings(
     List(
