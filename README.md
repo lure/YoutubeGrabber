@@ -1,6 +1,6 @@
 # YoutubeGrabber 
 [![Build Status](https://travis-ci.org/lure/YoutubeGrabber.svg?branch=master)](https://travis-ci.org/lure/YoutubeGrabber)
-[![Maven Central](https://img.shields.io/maven-central/v/ru.shubert/youtubegrabber_2.12.svg)](https://maven-badges.herokuapp.com/maven-central/ru.shubert/youtubegrabber_2.12)
+[![Maven Central](https://img.shields.io/maven-central/v/ru.shubert/youtubegrabber_2.13.svg)](https://maven-badges.herokuapp.com/maven-central/ru.shubert/youtubegrabber_2.13)
 
 
 Module that extracts downloadable video and audio streams from youtube. Basically you want exactly one you `YouTubeQuery` 
