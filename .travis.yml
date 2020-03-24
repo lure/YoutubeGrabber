@@ -1,6 +1,6 @@
 language: scala
 scala:
-   - 2.12.9
+   - 2.13.1
 jdk:
   - oraclejdk11
 script: "sbt test"
