@@ -19,7 +19,6 @@ import org.apache.http.impl.client.HttpClients
 
 import scala.collection.mutable
 import scala.util.matching.UnanchoredRegex
-import scala.util.{Failure, Success, Try}
 import scala.language.higherKinds
 import io.circe._
 import io.circe.parser._
@@ -47,8 +46,8 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
 
   case class SingleStream(urlExploded: Array[String], params: mutable.Buffer[NameValuePair])
 
-  case class TagStream(itag: Try[String] = defaultITag,
-                       signature: Try[String] = defaultSignature,
+  case class TagStream(signatureName: String = "signature",
+                       signature: F[String] = M.raiseError(defaultSignature),
                        params: mutable.TreeSet[NameValuePair] = mutable.TreeSet[NameValuePair]())
 
   protected[yt] def readStringFromUrl(url: String): F[String] = {
@@ -143,9 +142,9 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     * @param decipher decipher function
     * @return Map of videoType to url relations
     */
-  protected def buildDownloadLinks(urls: List[Format], decipher: String => String): List[Try[(Int, String)]] = {
+  protected def buildDownloadLinks(urls: List[Format], decipher: String => String): F[List[(Int, Format)]] = {
     def getSingleStream(desc: String) = {
-      // Why so complicate? Youtube servers rejects requests with : 1.duplicate tags (!!!), 2.with + replaced with ' ', 3.on some urldecodings.
+      // Why so complicated? Youtube servers rejects requests with : 1.duplicate tags (!!!), 2.with + replaced with ' ', 3.on some urldecodings.
       // So here we doing our best not to interfere with params.
       val params1 = URLEncodedUtils.parse(desc, StandardCharsets.UTF_8).asScala
       val splitUrl = params1.partition(_.getName == "url")
@@ -155,14 +154,16 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
       SingleStream(urlExploded, params)
     }
 
-    urls.map { desc =>
+
+    urls.traverse { desc =>
 //      logger.debug(s"For $md5 parsed url $desc")
       val singleStream: SingleStream = getSingleStream(desc.cipher)
       val urlExploded: Array[String] = singleStream.urlExploded
       val taggedStream = singleStream.params.foldLeft(TagStream()) { case (acc, pair) =>
         pair.getName match {
-          case "signature" => acc.copy(signature = Success(pair.getValue))
-          case "s" | "sign" => acc.copy(signature = Try(decipher(pair.getValue)))
+          case "sp" => acc.copy(signatureName = pair.getValue)
+          case "signature" => acc.copy(signature = M.pure(pair.getValue))
+          case "s" | "sign" => acc.copy(signature = M.catchNonFatal(decipher(pair.getValue)))
           case _ => // since 2016 youtube denies urls with empty params.
             if (pair.getValue != null && !pair.getValue.trim.isEmpty) {
               acc.params.add(pair)
@@ -172,14 +173,14 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
       }
 
 //      logger.debug(s"For $md5 params are ${taggedStream.params}")
-      (for {
+      for {
         sig <- taggedStream.signature
       } yield {
-        taggedStream.params.add(new BasicNameValuePair("sig", sig))
+        taggedStream.params.add(new BasicNameValuePair(taggedStream.signatureName, sig))
         taggedStream.params.add(new BasicNameValuePair("itag", desc.itag.toString))
         val link = urlExploded(0) + "?" + URLEncodedUtils.format(taggedStream.params.toList.asJava, StandardCharsets.UTF_8)
-        desc.itag -> link
-      })
+        desc.itag -> desc.copy(cipher = link)
+      }
     }
   }
 
@@ -189,7 +190,7 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     * @param page youtube video html page
     * @return optional map of streams
     */
-  def getStreamsFromString(page: String): F[Map[Int, String]] = {
+  def getStreamsFromString(page: String): F[Map[Int, Format]] = {
     for {
       cfg <- getPlayerConfig(page)
 
@@ -199,13 +200,11 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
       playerUlr <- playerUrlF
       decipher <- registerPlayer(playerUlr, readStringFromUrl)
 
-      videoF = M.catchNonFatal(buildDownloadLinks(streams.video, decipher))
-      adaptiveF = M.catchNonFatal(buildDownloadLinks(streams.adaptive, decipher))
 
-      video <- videoF
-      adaptive <- adaptiveF
+      video <- buildDownloadLinks(streams.video, decipher)
+      adaptive <- buildDownloadLinks(streams.adaptive, decipher)
     } yield {
-      (video ++ adaptive).filter(_.isSuccess).map(_.get).toMap
+      (video ++ adaptive).toMap
     }
   }
 
@@ -215,15 +214,14 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends Signature
     * @param url video url of form `https://www.youtube.com/watch?v=ecekSCX3B4Q`
     * @return option contains map of type to video url
     */
-  def getStreams(url: String): F[Map[Int, String]] = getStreamsFromString(url)
+  def getStreams(url: String): F[Map[Int, Format]] = readStringFromUrl(url).flatMap(getStreamsFromString)
 }
 
 object YouTubeQuery {
   private val logger = Logger(getClass.getName)
   lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12) AppleWebKit/602.1.50 (KHTML, like Gecko) Chrome/70.0.3538.77 Safari/537.36 Firefox/62.0"
   val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
-  lazy val defaultITag: Failure[Nothing] = Failure(YGParseException("itag not found"))
-  lazy val defaultSignature: Failure[Nothing] = Failure(YGParseException("subscription not found"))
+  lazy val defaultSignature: YGException  = YGParseException("Signature not found")
   lazy val unableToExtractJsException = throw YGParseException("Failed to extract js")
   case class Format(itag: Int,
                     mimeType: String,

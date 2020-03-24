@@ -149,14 +149,15 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
 }
 
 object SignatureDecipher {
-
   private val logger = Logger(getClass)
-  // dirty hack, read constructor declaration carefully
+  // bundled engines only
   protected lazy val factory = new ScriptEngineManager(null)
+
+
   // player parsing regexps
   protected val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
   protected val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
-  protected val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(\"\"\);""".r.unanchored
+  protected val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(""\);""".r.unanchored
   protected val FindProcName2020: UnanchoredRegex = """\b([a-zA-Z0-9$]{2})\s*=\s*function\(\s*a\s*\)\s*\{\s*a\s*=\s*a\.split\(\s*""\s*\)""".r.unanchored
   protected val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
   protected val ExternalFuncName: String = "decipher"

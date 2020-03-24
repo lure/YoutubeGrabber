@@ -17,7 +17,7 @@ import scala.util.matching.UnanchoredRegex
 class StreamValidTest extends FlatSpecLike with Matchers {
   // YouTube's TopStories news channel
   val NewsChannel = "https://www.youtube.com/"
-  val TopVideoRE: UnanchoredRegex = """(?:(?:href=)|(?:url":))"(\/watch\?v=[^"]*)""".r.unanchored
+  val TopVideoRE: UnanchoredRegex = """(?:(?:href=)|(?:url":))"(/watch\?v=[^"]*)""".r.unanchored
   val HttpsYouTubeCom = "https://www.youtube.com"
 
 //  "download method" should "return downloaded page" in {
@@ -34,13 +34,13 @@ class StreamValidTest extends FlatSpecLike with Matchers {
     val mapResult = ytq.getStreams(url).success.get
     mapResult.size should be >= count
     val errors = mapResult.foldLeft(List.empty[String]) {
-      case (acc, (_, link)) =>
-        val headMethod = new HttpHead(link)
+      case (acc, (_, f)) =>
+        val headMethod = new HttpHead(f.cipher)
         headMethod.setConfig(ytq.ReqConfig)
         try {
           val status = client.execute(headMethod).getStatusLine.getStatusCode
           if (status != 200) {
-            s"$link returned status $status" :: acc
+            s"${f.cipher} returned status $status" :: acc
           } else {
             acc
           }
