@@ -13,7 +13,8 @@ lazy val root = (project in file("."))
     ),
     libraryDependencies ++= Seq(
       apacheHttp,
-      jsonParser,
+      jsonParser1,
+      jsonParser2,
       cats,
       logging,
       logback,

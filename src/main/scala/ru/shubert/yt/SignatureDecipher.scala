@@ -110,7 +110,8 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
       }
     }
 
-    extractBody(FindProcName2018_2)
+    extractBody(FindProcName2020)
+      .orElse(extractBody(FindProcName2018_2))
       .orElse(extractBody(FindProcName2018))
       .orElse(extractBody(FindProcName2015)).get
   }
@@ -124,18 +125,13 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
         b
       } else {
         logger.debug(unableToFindProcBody)
-        throw unableToFindProcBodyExceptoin
+        throw unableToFindProcBodyException
       }
     }
 
     val cleanName = procName.replaceAll("\\$", """\\\$""")
-    // this obfuscation result was used till 2017
-    lazy val ExtractProc2014 = ("""(function\s""" + cleanName + """[^}]*})""").r.unanchored
-
-    // and this one is most recent
-    val ExtractProc2017= ("(" + cleanName + """\s*\=\s*function[^}]*})""").r.unanchored
-
-    extractBody(ExtractProc2017).orElse(extractBody(ExtractProc2014)).get
+    val ExtractProc2020= ("(?s)(" + cleanName + """\s*\=\s*function.*?\w+\.join\(\"\"\)\}\;)""").r.unanchored
+    extractBody(ExtractProc2020).get
   }
 
   /**
@@ -153,25 +149,27 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
 }
 
 object SignatureDecipher {
-
   private val logger = Logger(getClass)
-  // dirty hack, read constructor declaration carefully
+  // bundled engines only
   protected lazy val factory = new ScriptEngineManager(null)
+
+
   // player parsing regexps
   protected val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
   protected val FindProcName2018: UnanchoredRegex = """"signature"\),\s*\w*\.set[^,]+,([^(]*).*\)""".r.unanchored
-  protected val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(\"\"\);""".r.unanchored
+  protected val FindProcName2018_2: UnanchoredRegex = """(\w+)\s*=\s*function\s*\(\w\)\s*\{\s*\w\s*=\s*\w\.split\(""\);""".r.unanchored
+  protected val FindProcName2020: UnanchoredRegex = """\b([a-zA-Z0-9$]{2})\s*=\s*function\(\s*a\s*\)\s*\{\s*a\s*=\s*a\.split\(\s*""\s*\)""".r.unanchored
   protected val ExtractSubProcName: UnanchoredRegex = """(\w*).\w+\(\w+,\s*\d+\)""".r.unanchored
   protected val ExternalFuncName: String = "decipher"
 
   // just string and exception constants
   val unableToFindSubProcBody = "Unable to find sub proc body"
-  val noSubProcBodyException = YGDecipherException(unableToFindSubProcBody)
+  val noSubProcBodyException: YGDecipherException = YGDecipherException(unableToFindSubProcBody)
   val unableToFindSubProcName = "Unable to find sub proc name"
-  val noSubProcNameException = YGDecipherException(unableToFindSubProcName)
+  val noSubProcNameException: YGDecipherException = YGDecipherException(unableToFindSubProcName)
   val unableToFindProcName = "Unable to find main proc name"
-  val unableToFindProcNameException = YGDecipherException(unableToFindProcName)
+  val unableToFindProcNameException: YGDecipherException = YGDecipherException(unableToFindProcName)
   val unableToFindProcBody = "Unable to find main proc body"
-  val unableToFindProcBodyExceptoin = YGDecipherException("Unable to find main proc body")
-  val functionMissingException = YGDecipherException("No function exists")
+  val unableToFindProcBodyException: YGDecipherException = YGDecipherException("Unable to find main proc body")
+  val functionMissingException: YGDecipherException = YGDecipherException("No function exists")
 }
