@@ -9,7 +9,8 @@ lazy val root = (project in file("."))
       description := "Youtube video grabber",
       scalaVersion := mainScala,
       crossScalaVersions := Seq("2.11.8", "2.12.11", mainScala),
-      isSnapshot := false
+      isSnapshot := false,
+      mainClass in assembly := Some("Main")
     ),
     libraryDependencies ++= Seq(
       apacheHttp,

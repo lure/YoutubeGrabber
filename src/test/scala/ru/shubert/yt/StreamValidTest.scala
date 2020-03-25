@@ -25,9 +25,9 @@ class StreamValidTest extends FlatSpecLike with Matchers {
 //    ytq.readStringFromUrl(NewsChannel).success.value should startWith regex "\\s*(?i)<!DOCTYPE html><html"
 //  }
 
-  it should "handle 4k feed" in {
-    testExtraction(new YouTubeQuery[Try], "https://www.youtube.com/watch?v=9Yam5B_iasY", 24)
-  }
+//  it should "handle 4k feed" in {
+//    testExtraction(new YouTubeQuery[Try], "https://www.youtube.com/watch?v=9Yam5B_iasY", 24)
+//  }
 
   private def testExtraction(ytq: YouTubeQuery[Try], url: String, count: Int) = {
     val client = HttpClients.createDefault()
