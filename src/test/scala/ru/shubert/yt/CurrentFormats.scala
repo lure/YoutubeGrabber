@@ -1,15 +1,6 @@
 package ru.shubert.yt
 
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
-
-import io.circe._
-import io.circe.parser._
-import io.circe.generic.auto._
-import org.apache.http.client.utils.URLEncodedUtils
-import ru.shubert.yt.YouTubeQuery.Format
-
-object J extends App {
+object CurrentFormats extends App {
 //  val str = """{
 //              |  "streamingData": {
 //              |    "expiresInSeconds": "21540",
