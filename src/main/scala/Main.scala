@@ -7,6 +7,6 @@ object Main extends App {
 //  val filtered = result.get.filter{case (k,v) => v.mimeType.startsWith("video")}
 
   result.get.values.toList.sortBy(_.mimeType).foreach{ v =>
-    println(s"${v.mimeType} ${v.quality.getOrElse("")} ${v.qualityLabel.getOrElse("")}\n${v.cipher}\n")
+    println(s"${v.mimeType} ${v.quality.getOrElse("")} ${v.qualityLabel.getOrElse("")}\n${v.url.get}\n")
   }
 }
