@@ -17,27 +17,28 @@ To use the grabber, you'll need to provide any biased container, or anything for
 
 ```
   import cats.implicits._
-  val grabber = new YouTubeQuery[Try]
-  // or
-  val grabber = {
-    import monix.eval.Task
-    new YouTubeQuery[Task]
-  }
-  // and now 
-  for { 
-    streams <- grabber.getStreams(topVideoUrl) // handle the result    
-    _ <- doSomething(streams)
-  } yield ... 
+  val result = new YouTubeQuery[Try]().getStreams(args.head, videoOnly = false)
+  result.get.values.toList.sortBy(_.itag).foreach{ v =>
+    println(s"${v.itag} ${v.mimeType} ${v.quality.getOrElse("")} ${v.qualityLabel.getOrElse("")}\n${v.url.get}\n")
 ``` 
+
+`videoOnly = true` will return just two or three streams of video paired with audio. Otherwise all the available streams 
+will be returned. Youtube does not provide 1080+audio anymore (may be it is temporary decision).  
 
 `YouTubeConstants.scala` holds a dictionary of known stream types, use it to render basic information to user if needed.   
 
 **Adding things to projects:**
 
-sbt:
+SBT:
 
 ```
-libraryDependencies += "ru.shubert" %% "youtubegrabber" % "2.0"
+libraryDependencies += "ru.shubert" %% "youtubegrabber" % "2.5"
+```
+
+Gradle
+
+```
+implementation "ru.shubert:youtubegrabber_{scala_version}:2.5"
 ```
 
 Maven 

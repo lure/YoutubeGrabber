@@ -1,15 +1,6 @@
 package ru.shubert.yt
 
-import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
-
-import io.circe._
-import io.circe.parser._
-import io.circe.generic.auto._
-import org.apache.http.client.utils.URLEncodedUtils
-import ru.shubert.yt.YouTubeQuery.Format
-
-object J extends App {
+object CurrentFormats extends App {
 //  val str = """{
 //              |  "streamingData": {
 //              |    "expiresInSeconds": "21540",
@@ -52,6 +43,41 @@ object J extends App {
 //              |  }
 //              |}""".stripMargin
 //
+//  val str_url = """[{
+//                  |		"itag": 18,
+//                  |		"url": "https://r2---sn-8xgp1vo-xfgs.googlevideo.com/videoplayback?expire=1585212184&ei=txZ8Xu_NOquQ8gSQjoPQCg&ip=173.48.214.209&id=o-APIR2TU87FDl0WHBzjbAjU6VEGYM-Pg8Dk428B85R8K5&itag=18&source=youtube&requiressl=yes&mh=Vs&mm=31%2C29&mn=sn-8xgp1vo-xfgs%2Csn-ab5szn7r&ms=au%2Crdu&mv=m&mvi=1&pl=16&initcwndbps=1816250&vprv=1&mime=video%2Fmp4&gir=yes&clen=5160448&ratebypass=yes&dur=61.231&lmt=1447672977577067&mt=1585190488&fvip=5&fexp=23882514&c=WEB&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cgir%2Cclen%2Cratebypass%2Cdur%2Clmt&sig=ADKhkGMwRgIhALblo88shjgM1oFq2TwG2XijGjD7rMjrsQo7ug_e3PsqAiEAoQyig5Yn9JbT7qd1OA57ioTvi9pXeDFfz2jhNTdDUrg%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=ABSNjpQwRAIgLUwCpSk_PgdhmVZc6BNML0ppnw-uXv-v49af0SGGA5ACIBoEr_Hh-489V-_OYKR80xExyTD9KiWNtTlOL39Nv5_m",
+//                  |		"mimeType": "video/mp4; codecs=\"avc1.42001E, mp4a.40.2\"",
+//                  |		"bitrate": 674568,
+//                  |		"width": 640,
+//                  |		"height": 360,
+//                  |		"lastModified": "1447672977577067",
+//                  |		"contentLength": "5160448",
+//                  |		"quality": "medium",
+//                  |		"qualityLabel": "360p",
+//                  |		"projectionType": "RECTANGULAR",
+//                  |		"averageBitrate": 674226,
+//                  |		"audioQuality": "AUDIO_QUALITY_LOW",
+//                  |		"approxDurationMs": "61231",
+//                  |		"audioSampleRate": "44100",
+//                  |		"audioChannels": 2
+//                  |	},
+//                  |	{
+//                  |		"itag": 22,
+//                  |		"url": "https://r2---sn-8xgp1vo-xfgs.googlevideo.com/videoplayback?expire=1585212184&ei=txZ8Xu_NOquQ8gSQjoPQCg&ip=173.48.214.209&id=o-APIR2TU87FDl0WHBzjbAjU6VEGYM-Pg8Dk428B85R8K5&itag=22&source=youtube&requiressl=yes&mh=Vs&mm=31%2C29&mn=sn-8xgp1vo-xfgs%2Csn-ab5szn7r&ms=au%2Crdu&mv=m&mvi=1&pl=16&initcwndbps=1816250&vprv=1&mime=video%2Fmp4&ratebypass=yes&dur=61.231&lmt=1508491637052788&mt=1585190488&fvip=5&fexp=23882514&c=WEB&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cvprv%2Cmime%2Cratebypass%2Cdur%2Clmt&sig=ADKhkGMwRQIhAKxhr-y2Kls1PkgYac8VwF8NRw8hPcRJeifRQyeVzbGSAiB5shz0XawoGZyLg3jpGw5dJ3y7IFtMZBfLI20kEpCC1Q%3D%3D&lsparams=mh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Cinitcwndbps&lsig=ABSNjpQwRAIgLUwCpSk_PgdhmVZc6BNML0ppnw-uXv-v49af0SGGA5ACIBoEr_Hh-489V-_OYKR80xExyTD9KiWNtTlOL39Nv5_m",
+//                  |		"mimeType": "video/mp4; codecs=\"avc1.64001F, mp4a.40.2\"",
+//                  |		"bitrate": 1575398,
+//                  |		"width": 1280,
+//                  |		"height": 720,
+//                  |		"lastModified": "1508491637052788",
+//                  |		"quality": "hd720",
+//                  |		"qualityLabel": "720p",
+//                  |		"projectionType": "RECTANGULAR",
+//                  |		"audioQuality": "AUDIO_QUALITY_MEDIUM",
+//                  |		"approxDurationMs": "61231",
+//                  |		"audioSampleRate": "44100",
+//                  |		"audioChannels": 2
+//                  |	}
+//                  |]""".stripMargin
 //  def getSingleStream(desc: String) = {
 //    import scala.collection.JavaConverters._
 //    val params1 = URLEncodedUtils.parse(desc, StandardCharsets.UTF_8).asScala
