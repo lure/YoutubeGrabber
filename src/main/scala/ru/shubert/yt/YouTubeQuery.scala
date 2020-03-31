@@ -30,9 +30,6 @@ import scala.util.matching.UnanchoredRegex
 class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends StreamParser with SignatureDecipher {
   import YouTubeQuery._
 
-  //  noinspection ConvertExpressionToSAM
-  //  implicit val ordering: Ordering[NameValuePair] = (x: NameValuePair, y: NameValuePair) => x.getName.compare(y.getName)
-
   protected[yt] def readStringFromUrl(url: String): F[String] = {
     M.catchNonFatal {
       val method = new HttpGet(url)
