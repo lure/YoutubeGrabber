@@ -10,13 +10,14 @@ lazy val root = (project in file("."))
       scalaVersion := mainScala,
       crossScalaVersions := Seq("2.11.8", "2.12.11", mainScala),
       isSnapshot := false,
-      mainClass in assembly := Some("Main")
+//      mainClass in assembly := Some("Main")
     ),
     libraryDependencies ++= Seq(
       apacheHttp,
       jsonParser1,
       jsonParser2,
       cats,
+      scalaParallel,
       logging,
       logback,
       scalaTest,

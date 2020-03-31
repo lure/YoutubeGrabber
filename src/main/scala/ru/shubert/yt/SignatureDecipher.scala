@@ -1,45 +1,43 @@
 package ru.shubert.yt
 
+import cats.implicits._
+import com.typesafe.scalalogging.Logger
 import javax.script.{Invocable, ScriptEngineManager}
+import ru.shubert.yt.YGException.YGDecipherException
 
 import scala.collection.concurrent.TrieMap
 import scala.util.Try
 import scala.util.matching.{Regex, UnanchoredRegex}
-import cats.MonadError
-import cats.implicits._
-import com.typesafe.scalalogging.Logger
 
-import scala.language.higherKinds
 
 /**
   * Extracts and caches decode function from YouTube html5 player.
   * Uses JavaScript Engine to execute decoding function. It may be improved by caching desipher results and so on.
   */
-class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
+trait SignatureDecipher {
   import SignatureDecipher._
 
-  type DecipherFunction = F[String ⇒ String]
-
-  protected val map: TrieMap[String, DecipherFunction] = TrieMap[String, DecipherFunction]()
+  protected val map: TrieMap[PlayerUrl, DecipherFunction] = TrieMap[PlayerUrl, DecipherFunction]()
 
   /**
     * Downloads player, attempts to find decipher function and it's requirements, wrap it with
-    * custom name and store for future uses. Subsequental call with the same player url should not download it again,
+    * custom name and store for future uses. Sub-sequential call with the same player url should not download it again,
     * Alternative solution is to store the whole player and call it's functions.
     *
-    * @param playerUrl    where to get player
-    * @param downloadFunc which function to use to download player
+    * @param playerUrl  where to get player
+    * @param funcBody   js player body
     * @return Invocable function
     */
-  def registerPlayer(playerUrl: String, downloadFunc: String => F[String]): DecipherFunction = {
-    import cats.syntax.all._
-    map.getOrElse(playerUrl, {
-      val finalUrl: String = calculatePlayerUrl(playerUrl)
-      val invoker = downloadFunc(finalUrl).map(buildDecipherFunc)
-      val decipherFunction = invoker.map(func ⇒ (sig: String) ⇒ func.invokeFunction(ExternalFuncName, sig).toString)
-      map.put(playerUrl, decipherFunction)
-      decipherFunction
+  def registerPlayer(playerUrl: PlayerUrl, funcBody: String): DecipherFunction = {
+    map.getOrElseUpdate(playerUrl, {
+      val invoker = Either.catchOnly[YGDecipherException](buildDecipherFunc(funcBody))
+      invoker.map(func => (sig: String) => func.invokeFunction(ExternalFuncName, sig).toString)
     })
+  }
+
+  def getDecipher(playerUrl: String): DecipherFunction= {
+    val finalUrl = calculatePlayerUrl(playerUrl)
+    map.getOrElse(finalUrl, NotKnownYet(finalUrl).asLeft)
   }
 
   protected def buildDecipherFunc(player: String): Invocable = {
@@ -61,8 +59,8 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
     * @param playerUrl usually malformed url obtained from video page.
     * @return valid player download url
     */
-  protected def calculatePlayerUrl(playerUrl: String): String = {
-    if (playerUrl.startsWith("http")) {
+  def calculatePlayerUrl(playerUrl: String): PlayerUrl = {
+    PlayerUrl(if (playerUrl.startsWith("http")) {
       playerUrl
     } else {
       if (playerUrl.startsWith("//youtube.com/")) {
@@ -70,7 +68,7 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
       } else {
         "https://www.youtube.com" + playerUrl
       }
-    }
+    })
   }
 
   protected def extractSubProc(player: String, mainProcBody: String): String = {
@@ -88,11 +86,11 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
         sbBody
       } else {
         logger.debug(unableToFindSubProcBody)
-        throw noSubProcBodyException
+        throw NoSubProcBodyException
       }
     } else {
       logger.debug(unableToFindSubProcName)
-      throw noSubProcNameException
+      throw NoSubProcNameException
     }
   }
 
@@ -106,7 +104,7 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
         procName
       } else {
         logger.debug(unableToFindProcName)
-        throw unableToFindProcNameException
+        throw UnableToFindProcNameException
       }
     }
 
@@ -125,7 +123,7 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
         b
       } else {
         logger.debug(unableToFindProcBody)
-        throw unableToFindProcBodyException
+        throw UnableToFindProcBodyException
       }
     }
 
@@ -141,18 +139,22 @@ class SignatureDecipher[F[_]](implicit M: MonadError[F, Throwable]) {
     * @param playerUrl player url used as a key. No attemp to register
     * @return
     */
-  def decipher(playerUrl: String)(signature: String): F[String] = {
-    map.get(playerUrl)
-      .map(invoke ⇒ invoke.map(engine ⇒ engine(signature))
-      ).getOrElse(M.raiseError(functionMissingException))
+  def decipher(playerUrl: PlayerUrl)(signature: String): Either[YGDecipherException, String] = {
+    for {
+      mbFunc <- map.get(playerUrl).toRight(FunctionMissingException)
+      func <- mbFunc
+      res <- Either.catchNonFatal(func(signature)).leftMap(e => FunctionApplicationError(e))
+    } yield res
   }
 }
 
 object SignatureDecipher {
+  type DecipherFunction = Either[YGDecipherException, String => String]
   private val logger = Logger(getClass)
   // bundled engines only
   protected lazy val factory = new ScriptEngineManager(null)
 
+  case class PlayerUrl private[SignatureDecipher](v: String) extends AnyVal
 
   // player parsing regexps
   protected val FindProcName2015: UnanchoredRegex = """set\("signature",\s*(?:([^(]*).*)\);""".r.unanchored
@@ -163,13 +165,15 @@ object SignatureDecipher {
   protected val ExternalFuncName: String = "decipher"
 
   // just string and exception constants
-  val unableToFindSubProcBody = "Unable to find sub proc body"
-  val noSubProcBodyException: YGDecipherException = YGDecipherException(unableToFindSubProcBody)
   val unableToFindSubProcName = "Unable to find sub proc name"
-  val noSubProcNameException: YGDecipherException = YGDecipherException(unableToFindSubProcName)
+  val unableToFindSubProcBody = "Unable to find sub proc body"
   val unableToFindProcName = "Unable to find main proc name"
-  val unableToFindProcNameException: YGDecipherException = YGDecipherException(unableToFindProcName)
   val unableToFindProcBody = "Unable to find main proc body"
-  val unableToFindProcBodyException: YGDecipherException = YGDecipherException("Unable to find main proc body")
-  val functionMissingException: YGDecipherException = YGDecipherException("No function exists")
+  case object NoSubProcBodyException extends YGDecipherException(unableToFindSubProcBody)
+  case object NoSubProcNameException extends YGDecipherException(unableToFindSubProcName)
+  case object UnableToFindProcNameException extends YGDecipherException(unableToFindProcName)
+  case object UnableToFindProcBodyException extends YGDecipherException(unableToFindProcBody)
+  case object FunctionMissingException extends YGDecipherException("No function exists")
+  case class FunctionApplicationError(e: Throwable) extends YGDecipherException(s"Exception application failed with ${e.getMessage}")
+  case class NotKnownYet(player: PlayerUrl) extends YGDecipherException(s"Player url is not known yet ${player.v}")
 }

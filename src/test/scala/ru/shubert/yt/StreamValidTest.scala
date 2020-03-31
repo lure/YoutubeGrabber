@@ -7,9 +7,7 @@ import org.apache.http.impl.client.HttpClients
 import org.scalatest.TryValues._
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-
 import scala.util.Try
-import scala.util.matching.UnanchoredRegex
 
 class StreamValidTest extends AnyFlatSpecLike with Matchers {
   it should "handle 4k feed" in {
@@ -27,7 +25,7 @@ class StreamValidTest extends AnyFlatSpecLike with Matchers {
     val errors = mapResult.foldLeft(List.empty[String]) {
       case (acc, (_, f)) =>
         val headMethod = new HttpHead(f.url.get)
-        headMethod.setConfig(ytq.ReqConfig)
+        headMethod.setConfig(YouTubeQuery.ReqConfig)
         try {
           val status = client.execute(headMethod).getStatusLine.getStatusCode
           if (status != 200) {
