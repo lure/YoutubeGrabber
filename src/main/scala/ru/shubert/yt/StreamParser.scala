@@ -60,7 +60,7 @@ trait StreamParser {
     * @param decipher decipher function
     * @return Map of videoType to url relations
     */
-  protected def buildDownloadLinks(urls: List[Format], decipher: String => String): Either[Throwable, List[(Int, Format)]] = {
+  protected def buildDownloadLinks(urls: List[Format], decipher: String => String): Either[Throwable, List[Format]] = {
     def getSingleStream(desc: String, isQuery: Boolean) = {
       // Why so complicated? Youtube servers rejects requests with : 1.duplicate tags (!!!), 2.with + replaced with ' ', 3.on some urldecodings.
       // So here we doing our best not to interfere with params.
@@ -103,7 +103,7 @@ trait StreamParser {
           taggedStream.params.add(new BasicNameValuePair(taggedStream.signatureName.get, sig))
           taggedStream.params.add(new BasicNameValuePair("itag", desc.itag.toString))
           val link = singleStream.url + "?" + URLEncodedUtils.format(taggedStream.params.toList.asJava, StandardCharsets.UTF_8)
-          desc.itag -> desc.copy(url = link.some)
+          desc.copy(url = link.some)
         }
     }
     k.toList.sequence

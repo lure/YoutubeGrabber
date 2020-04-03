@@ -1,6 +1,7 @@
 import Dependencies._
 
 val mainScala = "2.13.1"
+
 lazy val root = (project in file("."))
   .settings(
     List(
@@ -9,8 +10,7 @@ lazy val root = (project in file("."))
       description := "Youtube video grabber",
       scalaVersion := mainScala,
       crossScalaVersions := Seq("2.11.8", "2.12.11", mainScala),
-      isSnapshot := false,
-//      mainClass in assembly := Some("Main")
+      isSnapshot := false
     ),
     libraryDependencies ++= Seq(
       apacheHttp,
@@ -24,7 +24,16 @@ lazy val root = (project in file("."))
 
     )
   )
+  .settings(assemblySetting)
   .settings(publishSettings)
+
+lazy val assemblySetting = Seq(
+  test in assembly := {},
+  mainClass in assembly := Some("Main"),
+  assemblyOutputPath in assembly :=
+    file(baseDirectory.value.getAbsolutePath + s"/docker/grabber.jar")
+//    file(baseDirectory.value.getAbsolutePath + s"/docker/grabber-${version.value}.jar")
+)
 
 lazy val publishSettings = Seq(
   publishMavenStyle := true,

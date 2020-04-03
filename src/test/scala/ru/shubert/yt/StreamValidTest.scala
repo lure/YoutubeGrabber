@@ -7,6 +7,8 @@ import org.apache.http.impl.client.HttpClients
 import org.scalatest.TryValues._
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import ru.shubert.yt.YouTubeQuery.StreamsWanted
+
 import scala.util.Try
 
 class StreamValidTest extends AnyFlatSpecLike with Matchers {
@@ -21,10 +23,10 @@ class StreamValidTest extends AnyFlatSpecLike with Matchers {
 
   private def testExtraction(ytq: YouTubeQuery[Try], url: String, count: Int) = {
     val client = HttpClients.createDefault()
-    val mapResult = ytq.getStreams(url).success.get
+    val mapResult = ytq.getStreams(url, StreamsWanted.all).success.get
     mapResult.size should be >= count
     val errors = mapResult.foldLeft(List.empty[String]) {
-      case (acc, (_, f)) =>
+      case (acc, f) =>
         val headMethod = new HttpHead(f.url.get)
         headMethod.setConfig(YouTubeQuery.ReqConfig)
         try {

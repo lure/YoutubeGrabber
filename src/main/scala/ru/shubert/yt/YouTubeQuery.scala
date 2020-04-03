@@ -1,7 +1,7 @@
 package ru.shubert.yt
 
 import _root_.java.io.{BufferedReader, InputStreamReader}
-import _root_.java.net.URLDecoder
+import _root_.java.net.{InetAddress, URLDecoder}
 import _root_.java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
@@ -16,6 +16,7 @@ import org.apache.http.client.utils.HttpClientUtils
 import org.apache.http.impl.client.HttpClients
 import ru.shubert.yt.SignatureDecipher.NotKnownYet
 import ru.shubert.yt.YGException.{YGNetworkException, YGParseException}
+
 import scala.util.matching.UnanchoredRegex
 
 /**
@@ -94,31 +95,30 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends StreamPar
     * @param page youtube video html page
     * @return optional map of streams
     */
-  def getStreamsFromString(page: String, videoOnly: Boolean): F[Map[Int, Format]] = {
-    for {
-      cfg <- getPlayerConfig(page)
-      playerUlr <- M.fromEither(getPlayerUrl(cfg))
-      streams <- M.fromEither(extractStreamsUrl(cfg))
-      decipher <- getDecipher(playerUlr) match {
-        case Right(decipher) =>
-          M.pure(decipher)
-        case Left(NotKnownYet(pl)) =>
-          readStringFromUrl(pl.v).flatMap(body => M.fromEither(registerPlayer(pl, body)))
-        case Left(e) =>
-          M.raiseError[String => String](e)
-      }
+  def getStreamsFromString(page: String, streamsWanted: StreamsWanted.Value): F[List[Format]] = for {
+    cfg <- getPlayerConfig(page)
+    playerUlr <- M.fromEither(getPlayerUrl(cfg))
+    streams <- M.fromEither(extractStreamsUrl(cfg))
+    decipher <- getDecipher(playerUlr) match {
+                  case Right(decipher) =>
+                    M.pure(decipher)
+                  case Left(NotKnownYet(pl)) =>
+                    readStringFromUrl(pl.v).flatMap(body => M.fromEither(registerPlayer(pl, body)))
+                  case Left(e) =>
+                    M.raiseError[String => String](e)
+                }
 
-      video <- M.fromEither(buildDownloadLinks(streams.video, decipher))
-      adaptive <- M.fromEither( if (!videoOnly)
-                    buildDownloadLinks(streams.adaptive, decipher)
-                  else
-                    List[(Int, Format)]().asRight
-      )
+    video <- M.fromEither( if (streamsWanted == StreamsWanted.video || streamsWanted == StreamsWanted.all)
+                              buildDownloadLinks(streams.video, decipher)
+                            else
+                              List[Format]().asRight)
+    adaptive <- M.fromEither( if (streamsWanted == StreamsWanted.audio || streamsWanted == StreamsWanted.all)
+                              buildDownloadLinks(streams.adaptive, decipher)
+                            else
+                              List[Format]().asRight)
     } yield {
-      //TODO: do not like, return formats and adaptives?
-      (video ++ adaptive).toMap
+      video ++ adaptive
     }
-  }
 
   /**
     * Scala oriented method that returns possible video streams.
@@ -126,11 +126,15 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends StreamPar
     * @param url video url of form `https://www.youtube.com/watch?v=ecekSCX3B4Q`
     * @return option contains map of type to video url
     */
-  def getStreams(url: String, videoOnly: Boolean = false): F[Map[Int, Format]] =
-    readStringFromUrl(url).flatMap(getStreamsFromString(_, videoOnly))
+  def getStreams(url: String, streamsWanted: StreamsWanted.Value = StreamsWanted.video): F[List[Format]] =
+    readStringFromUrl(url).flatMap(getStreamsFromString(_, streamsWanted))
 }
 
 object YouTubeQuery {
+  object StreamsWanted extends Enumeration {
+    val all, video, audio = Value
+  }
+
   private val logger = Logger(getClass.getName)
 
   protected[yt] val ReqConfig: RequestConfig = RequestConfig.custom().setConnectionRequestTimeout(5000)
@@ -155,4 +159,5 @@ object YouTubeQuery {
                     audioChannels: Option[Int],
                     cipher: Option[String],
                     url: Option[String])
+
 }

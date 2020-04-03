@@ -12,14 +12,11 @@ be omitted from output map.
 
 
 **Usage:** 
-
 To use the grabber, you'll need to provide any biased container, or anything for what MonadError typeclass implementation exists / may be implemented.
 
 ```
   import cats.implicits._
-  val result = new YouTubeQuery[Try]().getStreams(args.head, videoOnly = false)
-  result.get.values.toList.sortBy(_.itag).foreach{ v =>
-    println(s"${v.itag} ${v.mimeType} ${v.quality.getOrElse("")} ${v.qualityLabel.getOrElse("")}\n${v.url.get}\n")
+  val result = new YouTubeQuery[Try]().getStreams(args.head)
 ``` 
 
 `videoOnly = true` will return just two or three streams of video paired with audio. Otherwise all the available streams 
@@ -32,13 +29,13 @@ will be returned. Youtube does not provide 1080+audio anymore (may be it is temp
 SBT:
 
 ```
-libraryDependencies += "ru.shubert" %% "youtubegrabber" % "2.5"
+libraryDependencies += "ru.shubert" %% "youtubegrabber" % "2.8"
 ```
 
 Gradle
 
 ```
-implementation "ru.shubert:youtubegrabber_{scala_version}:2.5"
+implementation "ru.shubert:youtubegrabber_{scala_version}:2.8"
 ```
 
 Maven 
@@ -53,4 +50,18 @@ Maven
   <artifactId>youtubegrabber_${scala.major}</artifactId>
   <version>2.0</version>
 </dependency>
+```
+
+## Docker
+
+Existing image 
+```
+$ docker pull lure/grabber:v2.8
+$ docker run --rm lure/grabber:v2.8 https://www.youtube.com/watch?v=I3loMuHnYqw
+```
+
+Or rebuild from sources
+```
+$./docker/build.sh
+$ docker run --rm lure/grabber:v2.8 https://www.youtube.com/watch?v=I3loMuHnYqw
 ```
