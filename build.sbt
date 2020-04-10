@@ -17,6 +17,7 @@ lazy val root = (project in file("."))
       jsonParser1,
       jsonParser2,
       cats,
+      catsEffect,
       scalaParallel,
       logging,
       logback,

@@ -1,22 +1,20 @@
 package ru.shubert.yt
 
-import _root_.java.io.{BufferedReader, InputStreamReader}
-import _root_.java.net.{InetAddress, URLDecoder}
+import _root_.java.net.URLDecoder
 import _root_.java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 
-import cats.MonadError
+import cats.effect.{Resource, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
-import io.circe.{HCursor, _}
 import io.circe.parser._
+import io.circe.{HCursor, _}
 import org.apache.http.client.config.RequestConfig
-import org.apache.http.client.methods.{CloseableHttpResponse, HttpGet}
-import org.apache.http.client.utils.HttpClientUtils
+import org.apache.http.client.methods.HttpGet
 import org.apache.http.impl.client.HttpClients
 import ru.shubert.yt.SignatureDecipher.NotKnownYet
 import ru.shubert.yt.YGException.{YGNetworkException, YGParseException}
 
+import scala.io.Source
 import scala.util.matching.UnanchoredRegex
 
 /**
@@ -28,44 +26,37 @@ import scala.util.matching.UnanchoredRegex
   * normal `s=`  https://www.youtube.com/watch?v=UxxajLWwzqY | adaptive_fmts
   * normal `s=`  https://www.youtube.com/watch?v=8UVNT4wvIGY | url_encoded_fmt_stream_map
   */
-class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends StreamParser with SignatureDecipher {
+class YouTubeQuery[F[_]: Sync] extends StreamParser with SignatureDecipher {
   import YouTubeQuery._
 
+
   protected[yt] def readStringFromUrl(url: String): F[String] = {
-    M.catchNonFatal {
-      val method = new HttpGet(url)
-      method.setHeader("Accept-Charset", StandardCharsets.UTF_8.name())
-      method.setHeader("User-Agent", ModernBrowser)
-      method.setConfig(ReqConfig)
-
-      val client = HttpClients.createDefault()
-      var resp: CloseableHttpResponse = null
-
-      try {
-        resp = client.execute(method)
-        val status = resp.getStatusLine.getStatusCode
-        if (status == 200) {
-          logger.debug("Successful download for url {}", url)
-          val stream = new BufferedReader(new InputStreamReader(resp.getEntity.getContent))
-          val buffer = new StringBuilder
-          Iterator.continually(stream.readLine()).takeWhile(_ != null).foreach(buffer.append)
-          buffer.toString()
-        } else {
-          val msg = s"Error code $status while accessing $url"
-          logger.debug(msg)
-          throw YGNetworkException(msg)
-        }
-      } finally {
-        HttpClientUtils.closeQuietly(client)
-        HttpClientUtils.closeQuietly(resp)
-      }
+    def makeMethod: HttpGet = {
+      val m = new HttpGet(url)
+      m.setHeader("Accept-Charset", StandardCharsets.UTF_8.name())
+      m.setHeader("User-Agent", ModernBrowser)
+      m.setConfig(ReqConfig)
+      m
     }
-  }
 
-  protected def MD5(value: String): String = {
-    val md5 = MessageDigest.getInstance("MD5")
-    md5.update(value.getBytes(StandardCharsets.UTF_8))
-    md5.digest().take(5).map("%02x".format(_)).mkString
+    (for {
+      client <- Resource.fromAutoCloseable(Sync[F].delay(HttpClients.createDefault()))
+      method = makeMethod
+      resp <- Resource.fromAutoCloseable(Sync[F].delay(client.execute(method)))
+      status = resp.getStatusLine.getStatusCode
+
+      src <- if (status == 200) {
+        Resource.fromAutoCloseable(
+          Sync[F].delay(Source.fromInputStream(resp.getEntity.getContent)(scala.io.Codec.UTF8)))
+      } else {
+        Resource.liftF(
+          Sync[F].delay {
+            val msg = s"Error code $status while accessing $url"
+            logger.debug(msg)
+            throw YGNetworkException(msg)
+          })
+      }
+    } yield src).use( x => Sync[F].pure(x.getLines().mkString))
   }
 
   /**
@@ -74,14 +65,15 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends StreamPar
     * @param page where player should be found
     * @return json nodes wrapped in Success or Failure with exception
     */
-  protected def getPlayerConfig(page: String): F[HCursor] = page match {
-    case PlayerConfigRegex(streams) =>
-      M.pure(parse(streams).getOrElse(Json.Null).hcursor)
-    case _ =>
-      logger.error("Unable to extract player config from (first 300) " + page.take(300))
-      M.raiseError(YGParseException("Player script was changed: " + page))
+  protected def getPlayerConfig(page: String): Either[Exception, HCursor] = {
+    val z = PlayerConfigRegex.findFirstMatchIn(page)
+    for {
+      streams <- PlayerConfigRegex.findFirstMatchIn(page)
+        .map(_.group(1))
+        .toRight(YGParseException("Unable to extract player config"))
+      cursor <- parse(streams).map(_.hcursor)
+    } yield cursor
   }
-
 
   protected def getPlayerUrl(jsPlayerParams: HCursor): Either[DecodingFailure, String] =
     jsPlayerParams.downField("assets")
@@ -96,23 +88,23 @@ class YouTubeQuery[F[_]](implicit M: MonadError[F, Throwable]) extends StreamPar
     * @return optional map of streams
     */
   def getStreamsFromString(page: String, streamsWanted: StreamsWanted.Value): F[List[Format]] = for {
-    cfg <- getPlayerConfig(page)
-    playerUlr <- M.fromEither(getPlayerUrl(cfg))
-    streams <- M.fromEither(extractStreamsUrl(cfg))
+    cfg <- Sync[F].fromEither(getPlayerConfig(page))
+    playerUlr <- Sync[F].fromEither(getPlayerUrl(cfg))
+    streams <- Sync[F].fromEither(extractStreamsUrl(cfg))
     decipher <- getDecipher(playerUlr) match {
                   case Right(decipher) =>
-                    M.pure(decipher)
+                    Sync[F].pure(decipher)
                   case Left(NotKnownYet(pl)) =>
-                    readStringFromUrl(pl.v).flatMap(body => M.fromEither(registerPlayer(pl, body)))
+                    readStringFromUrl(pl.v).flatMap(body => Sync[F].fromEither(registerPlayer(pl, body)))
                   case Left(e) =>
-                    M.raiseError[String => String](e)
+                    Sync[F].raiseError[String => String](e)
                 }
 
-    video <- M.fromEither( if (streamsWanted == StreamsWanted.video || streamsWanted == StreamsWanted.all)
+    video <- Sync[F].fromEither( if (streamsWanted == StreamsWanted.video || streamsWanted == StreamsWanted.all)
                               buildDownloadLinks(streams.video, decipher)
                             else
                               List[Format]().asRight)
-    adaptive <- M.fromEither( if (streamsWanted == StreamsWanted.audio || streamsWanted == StreamsWanted.all)
+    adaptive <- Sync[F].fromEither( if (streamsWanted == StreamsWanted.audio || streamsWanted == StreamsWanted.all)
                               buildDownloadLinks(streams.adaptive, decipher)
                             else
                               List[Format]().asRight)
@@ -141,7 +133,8 @@ object YouTubeQuery {
     .setConnectTimeout(5000).setRedirectsEnabled(true).build()
   lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15 Chrome/80.0.3987.149 Firefox/74.0"
 
-  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
+//  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
+  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});ytplayer\.""".r.unanchored
   lazy val unableToExtractJsException = throw YGParseException("Failed to extract js")
   final case class Format(itag: Int,
                     mimeType: String,
