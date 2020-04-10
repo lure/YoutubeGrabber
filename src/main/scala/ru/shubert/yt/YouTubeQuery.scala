@@ -66,7 +66,6 @@ class YouTubeQuery[F[_]: Sync] extends StreamParser with SignatureDecipher {
     * @return json nodes wrapped in Success or Failure with exception
     */
   protected def getPlayerConfig(page: String): Either[Exception, HCursor] = {
-    val z = PlayerConfigRegex.findFirstMatchIn(page)
     for {
       streams <- PlayerConfigRegex.findFirstMatchIn(page)
         .map(_.group(1))
