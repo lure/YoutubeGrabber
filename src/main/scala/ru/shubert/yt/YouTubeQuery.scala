@@ -149,7 +149,7 @@ object YouTubeQuery {
                     approxDurationMs: String,
                     audioSampleRate: Option[String],
                     audioChannels: Option[Int],
-                    cipher: Option[String],
+                    signatureCipher: Option[String],
                     url: Option[String])
 
 }

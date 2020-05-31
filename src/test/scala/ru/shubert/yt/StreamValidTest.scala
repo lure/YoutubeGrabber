@@ -33,7 +33,7 @@ class StreamValidTest extends AnyFlatSpecLike with Matchers {
         try {
           val status = client.execute(headMethod).getStatusLine.getStatusCode
           if (status != 200) {
-            s"${f.cipher} returned status $status" :: acc
+            s"${f.signatureCipher} returned status $status" :: acc
           } else {
             acc
           }

@@ -81,7 +81,7 @@ trait StreamParser {
     val seen = new TrieMap[String, Either[Throwable, String]]()
 
     val k = urls.par.map { desc =>
-        val singleStream: SingleStream = getSingleStream(desc.cipher.orElse(desc.url).get, desc.cipher.isDefined)
+        val singleStream: SingleStream = getSingleStream(desc.signatureCipher.orElse(desc.url).get, desc.signatureCipher.isDefined)
         val taggedStream = singleStream.params.foldLeft(TagStream()) { case (acc, pair) =>
           pair.getName match {
             case "sp" => acc.copy(signatureName = pair.getValue.some)
