@@ -1,13 +1,12 @@
 package ru.shubert.yt
 
-import _root_.java.net.URLDecoder
 import _root_.java.nio.charset.StandardCharsets
 
 import cats.effect.{Resource, Sync}
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.circe.parser._
-import io.circe.{HCursor, _}
+import io.circe.HCursor
 import org.apache.http.client.config.RequestConfig
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.impl.client.HttpClients
@@ -74,11 +73,11 @@ class YouTubeQuery[F[_]: Sync] extends StreamParser with SignatureDecipher {
     } yield cursor
   }
 
-  protected def getPlayerUrl(jsPlayerParams: HCursor): Either[DecodingFailure, String] =
-    jsPlayerParams.downField("assets")
-      .get[String]("js")
-      .map(URLDecoder.decode(_, StandardCharsets.UTF_8.name()))
-
+  protected def getPlayerUrl(page: String): Either[YGParseException, String] = {
+    PlayerURL.findFirstMatchIn(page)
+      .map(_.group(1))
+      .toRight(YGParseException("Unable to extract player config"))
+  }
 
   /**
     * Parse streams from whole page represented by string.
@@ -88,7 +87,7 @@ class YouTubeQuery[F[_]: Sync] extends StreamParser with SignatureDecipher {
     */
   def getStreamsFromString(page: String, streamsWanted: StreamsWanted.Value): F[List[Format]] = for {
     cfg <- Sync[F].fromEither(getPlayerConfig(page))
-    playerUlr <- Sync[F].fromEither(getPlayerUrl(cfg))
+    playerUlr <- Sync[F].fromEither(getPlayerUrl(page))
     streams <- Sync[F].fromEither(extractStreamsUrl(cfg))
     decipher <- getDecipher(playerUlr) match {
                   case Right(decipher) =>
@@ -133,7 +132,8 @@ object YouTubeQuery {
   lazy val ModernBrowser = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.1 Safari/605.1.15 Chrome/80.0.3987.149 Firefox/74.0"
 
 //  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});\s*ytplayer\.load""".r.unanchored
-  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytplayer\.config\s*=\s*(\{.*\});ytplayer\.""".r.unanchored
+  val PlayerConfigRegex: UnanchoredRegex = """(?i)ytInitialPlayerResponse\s*=\s*(\{.*\});var\smeta\s*=\s*document.""".r.unanchored
+  val PlayerURL: UnanchoredRegex = """(?i)"jsUrl":"([^"]+)"""".r.unanchored
   lazy val unableToExtractJsException = throw YGParseException("Failed to extract js")
   final case class Format(itag: Int,
                     mimeType: String,

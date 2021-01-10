@@ -6,7 +6,6 @@ import java.nio.charset.StandardCharsets
 import cats.implicits._
 import com.typesafe.scalalogging.Logger
 import io.circe.HCursor
-import io.circe.parser.parse
 import org.apache.http.NameValuePair
 import org.apache.http.client.utils.URLEncodedUtils
 import org.apache.http.message.BasicNameValuePair
@@ -29,9 +28,7 @@ trait StreamParser {
     import io.circe.generic.auto._
 
     (for {
-      root <- cfg.downField("args").get[String]("player_response")
-      parsed <- parse(root)
-      data = parsed.hcursor.downField("streamingData")
+      data <- Either.catchNonFatal(cfg.downField("streamingData")).leftMap(x => YGParseException(x.getMessage) )
       video <- data.downField("formats").as[List[Format]]
       adaptive <- data.downField("adaptiveFormats").as[List[Format]]
     } yield {
@@ -90,7 +87,7 @@ trait StreamParser {
                 val sign = seen.getOrElseUpdate(pair.getValue, Either.catchNonFatal(decipher(pair.getValue)))
                 acc.copy(signature = sign)
             case _ => // since 2016 youtube denies urls with empty params.
-              if (pair.getValue != null && !pair.getValue.trim.isEmpty) {
+              if (pair.getValue != null && pair.getValue.trim.nonEmpty) {
                 acc.params.add(pair)
               }
               acc
